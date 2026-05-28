@@ -1,0 +1,312 @@
+
+MEDITECH
+
+Business Requirements & Software Specification Document
+
+Version1.0 — DraftDate2026StatusFor ReviewPrepared by[Your Name / Team]ClientMeditech
+
+
+1. Document Information
+
+1.1 Purpose
+This Business Requirements and Software Specification Document (BRD/SRS) defines the functional and non-functional requirements for the Meditech web application. It serves as the primary reference for design, development, and quality assurance activities throughout the project lifecycle.
+
+1.2 Scope
+Meditech is a healthcare management web application that enables patients, medical staff, and system administrators to manage appointments and patient health records through role-specific dashboards. The system supports three user roles: User (Patient), Staff (Medical Staff), and Admin (System Administrator).
+
+1.3 Definitions & Abbreviations
+TermDefinitionBRDBusiness Requirements DocumentSRSSoftware Requirements SpecificationEMRElectronic Medical Record — a digital version of a patient's medical historyOTPOne-Time Password — a time-limited single-use code for authenticationCRUDCreate, Read, Update, Delete — standard database operationsUIUser InterfaceUXUser Experience2FATwo-Factor Authentication
+1.4 Document Conventions
+? Requirements marked with ? Needs Clarification are pending confirmation from stakeholders.
+? Changes from previous revisions will be tracked in the Change Log section at the end of this document.
+? Field validation rules apply to all user input fields unless otherwise stated.
+
+
+
+2. User Access Matrix
+
+The table below outlines the access rights for each role across all major system features.
+
+FeatureAdminStaffUser (Patient)User Management (CRUD)? Full??Patient Records (View)? All? Assigned patients? Own onlyPatient Records (Edit)? All? Assigned patients?Appointment Booking? All? Manage all? Own onlyAppointment Management? Full? Full?Audit / System Logs? Full??Dashboard? Admin dashboard? Staff dashboard? Patient dashboardAccount Settings???
+?  Needs Clarification: Confirm whether Staff access to patient records is restricted by assignment or department, or if all staff can view all patients.
+
+
+
+3. Requirements
+
+3.1 Login Page
+a. Features
+? Username / Email Field
+? Accepts the patient's registered email address.
+? Accepted domain: @gmail.com only.
+? Length: 6–32 characters (excluding domain), must include a mix of upper and lowercase letters, numbers, and allowed symbols ( _ . ).
+? Password Field
+? Strong password: 15–20 characters, must include upper and lowercase letters, numbers, and allowed symbols ( ! @ ? _ - ).
+? Show password toggle — eye icon or checkbox to reveal the typed password.
+? Caps Lock indicator — alerts user when Caps Lock is active to prevent failed attempts.
+? Password Security
+? Field validation: no emojis, no excessively long text.
+? Forced password change on first login — the Admin sets a default password (e.g., date of birth); users must change it before accessing their dashboard.
+? Password hashing using bcryptjs.
+? Prevent reuse of the previous 3 passwords (hashes stored).
+? OTP per Login
+? Users must enter an OTP sent to their registered email on every login.
+? OTP consists of numbers only.
+? OTP is valid for 90 seconds from creation.
+? Maximum of 3 attempts per OTP; OTP becomes invalid after 3 failed attempts.
+? OTP resend countdown (90 seconds).
+? Maximum of 5 OTP requests per day.
+? OTP resend button available after countdown.
+
+?  Needs Clarification: Confirm whether OTP is sent via email only, or if SMS / authenticator apps are also in scope.
+
+b. Functionality
+? Login Credentials
+? Registered patient/staff/admin email.
+? Admin-provided default password on first login.
+? First Login Flow
+? User is redirected to user verification before accessing their dashboard.
+? User must complete OTP verification.
+? User must pick and answer three security questions (answers hashed using bcryptjs).
+? User must set a new password.
+? After successful password change, user is redirected to the login page for a fresh login.
+? Failed Login Attempts
+? Each failed attempt shows an error: 'Invalid credentials' (does not specify which field is incorrect).
+? Account is disabled on the 3rd consecutive failed attempt.
+? User must use the Forgot Password process to re-enable their account.
+? All login attempts (success and failure) are logged.
+? Role-Based Redirection
+? On successful login, user is redirected to the dashboard corresponding to their role.
+
+3.2 Sign-Up / Registration Page
+
+?  Needs Clarification: Clarify: Is self-registration available to patients, or are all accounts created by the Admin? The flow below assumes Admin-created accounts only, matching the OrasSync reference. Update this section if patients can register themselves.
+
+a. Admin-Created Accounts (Default Assumption)
+? The Admin creates accounts for Patients and Staff individually or via batch import (.xlsx / .xls).
+? A default password is set by the Admin (e.g., date of birth of the patient).
+? The user is notified of their credentials via their registered email.
+? On first login, the user is forced to change the default password.
+
+b. Self-Registration Flow (If Applicable)
+?  Needs Clarification: If patient self-registration is required, define the fields below. This section is pending client confirmation.
+
+? Required Fields:
+? Full name (first name, last name)
+? Date of birth
+? Email address (used as username)
+? Contact number
+? Password (strong password rules apply — see 3.1)
+? Optional Fields:
+? Home address
+? Emergency contact
+? Field Validation:
+? No emojis; mix of letters, numbers, and allowed punctuation.
+? Email must be unique — duplicate accounts are not permitted.
+? Verification: OTP sent to the provided email must be confirmed before account activation.
+
+
+
+3.3 Forgot Password / Password Reset Page
+
+a. First-Time Login Password Reset
+? OTP Input Field
+? OTP consists of numbers only.
+? OTP can only be requested using the registered company/patient email.
+? OTP is valid for 90 seconds from creation.
+? Maximum 3 attempts per OTP; OTP becomes invalid after 3 failed attempts.
+? OTP resend countdown: 90 seconds.
+? Maximum 5 OTP requests per day.
+? OTP resend button.
+? Security Questions Setup
+? User picks and answers 3 security questions.
+? Answers are hashed using bcryptjs.
+? Field validation: no emojis; mix of upper and lowercase letters and numbers.
+? Password Change
+? User sets a new password meeting the strong password requirements (see 3.1).
+? After completion, user is redirected to the login page.
+
+b. Active User Password Reset
+? OTP Input Field
+? OTP consists of numbers only.
+? OTP can only be requested using the registered email.
+? OTP valid for 90 seconds; max 3 attempts; max 5 requests per day.
+? OTP resend countdown and resend button.
+? Security Question Verification
+? User is asked one random security question from the three they answered during setup.
+? Field validation: no emojis; mix of upper and lowercase letters and numbers.
+? Maximum 3 attempts to answer correctly.
+? New Password
+? User enters and confirms a new password.
+? New password must meet strong password requirements (see 3.1).
+
+
+
+4. Dashboards
+
+4.0 Common Dashboard Features (All Roles)
+? Logout feature accessible from all dashboards.
+? Settings panel:
+? Change password (same flow as Forgot Password for active users).
+? Light / dark mode toggle.
+? Notifications panel — displays alerts relevant to the user's role (e.g., appointment confirmations, pending reviews, rejected records).
+
+4.1 Patient (User) Dashboard
+a. Features
+? Patient Profile
+? Displays full name, date of birth, contact number, and assigned physician/department.
+?  Needs Clarification: Confirm which profile fields are shown and whether patients can edit their own profile.
+? Upcoming Appointments
+? Shows the patient's next scheduled appointment(s) including date, time, and attending staff.
+? Option to cancel or reschedule an appointment (subject to confirmation).
+? Medical History / Records
+? Read-only view of the patient's own EMR entries.
+? Includes diagnosis history, past visits, and notes entered by staff.
+? Appointment Booking
+? Patient can request a new appointment by selecting a date, time, and department or physician.
+? Booking is subject to staff/admin approval or real-time availability.
+?  Needs Clarification: Clarify: Is appointment booking immediate (real-time slot selection) or request-based (pending approval by staff)?
+? Messaging / Consultation
+?  Needs Clarification: Messaging feature is currently under review. Confirm scope and implementation before including in development. Will be added to a future revision once decided.
+
+4.2 Staff (Medical Staff) Dashboard
+a. Features
+? Staff Profile
+? Displays name, position/role, department, and contact information.
+? Appointment Management
+? View a list of all scheduled appointments for the day/week.
+? Approve, reschedule, or cancel patient appointment requests.
+? Search and filter appointments by patient name, date, or status.
+? Patient Records / EMR
+? View the medical records of assigned patients.
+? Add or update EMR entries: diagnosis, notes, visit summary, and prescribed items.
+? Records are timestamped and attributed to the staff member who created/edited them.
+?  Needs Clarification: Clarify: Can all staff view all patient records, or only the patients assigned to them? Confirm whether 'assigned patients' means per doctor, per department, or per team.
+? Search
+? Staff can search for patients by name or patient ID.
+
+4.3 Admin (System Administrator) Dashboard
+a. Features
+? User Management Table
+? Displays all registered users with: User ID, full name, role (Patient / Staff / Admin), account status (Active, Disabled, Deactivated), email, and date registered.
+? Searchable and filterable by role, status, and department.
+? Tabs:
+? Active users
+? Disabled users
+? Deactivated users
+? CRUD Functions
+? Add User — create a single account with a form, or batch import via .xlsx / .xls file.
+? Edit User — update user details via a pop-up panel.
+? Account Recovery — change a user's status from 'Disabled' back to 'Active'.
+? Deactivate User — soft delete: removes user from active tables but retains all records in the database to preserve historical data.
+? A confirmation dialog is required before deactivation.
+b. Audit Logs (Separate Tab)
+? Read-only log of all system changes: user account changes, EMR edits, appointment changes, schedule changes.
+? Each log entry includes: timestamp, action performed, affected record, and the user who performed the action.
+
+
+
+5. Appointment Scheduling
+
+5.1 Patient Appointment Booking
+? Patients can request an appointment from their dashboard.
+? Required fields: preferred date, preferred time, reason for visit, department or physician preference.
+? Field validation: no emojis; mix of letters and allowed punctuation.
+? Patient receives a notification upon approval, rescheduling, or cancellation of their request.
+?  Needs Clarification: Confirm: Are appointments real-time (calendar slot selection) or request-based (approval workflow)?
+
+5.2 Staff Appointment Management
+? Staff can view all appointments assigned to them or their department.
+? Staff can approve, reschedule, or cancel appointment requests.
+? Staff can create appointments on behalf of a patient.
+? Appointment statuses: Pending, Confirmed, Completed, Cancelled, Rescheduled.
+
+5.3 Admin Appointment Oversight
+? Admin has read/write access to all appointments system-wide.
+? Admin can override appointment status if necessary.
+
+
+
+6. Patient Records / EMR
+
+6.1 Record Structure
+? Each patient record contains:
+? Patient ID and basic demographics
+? Visit history (date, attending staff, department)
+? Diagnosis and clinical notes
+? Allergies and existing conditions
+?  Needs Clarification: Confirm the full list of EMR fields required. Add: prescriptions, lab results, or other fields if in scope for a future revision.
+
+6.2 Access Rules
+? Patients: read-only access to their own record.
+? Staff: can view and update records of assigned patients.
+? Admin: full read/write access to all records.
+? All edits to a record are logged in the audit trail with the editor's identity and timestamp.
+
+
+
+7. Notifications
+
+All users have access to a notifications panel from their dashboard.
+
+7.1 Patient Notifications
+? Appointment confirmed / cancelled / rescheduled.
+? New message from staff (if messaging is implemented).
+? Reminder for upcoming appointments.
+7.2 Staff Notifications
+? New appointment request pending review.
+? Patient record updated by another staff member.
+? System alerts from Admin.
+7.3 Admin Notifications
+? New user account created.
+? Account recovery requests.
+? System errors or flagged issues.
+
+?  Needs Clarification: Confirm: Are notifications in-app only, or will email / SMS notifications also be sent?
+
+
+
+8. Non-Functional Requirements
+
+8.1 Security
+? All passwords are hashed using bcryptjs.
+? OTP authentication is required at every login.
+? Sessions automatically expire after 30 minutes of inactivity.
+? HTTPS is enforced across all pages.
+? All sensitive data is encrypted at rest and in transit.
+?  Needs Clarification: Confirm inactivity timeout duration and whether it applies to all roles equally.
+
+8.2 Performance
+? Dashboard pages should load within 3 seconds under normal network conditions.
+? The system should support concurrent users without degradation in response time.
+?  Needs Clarification: Define expected concurrent user count and peak load scenarios.
+
+8.3 Usability
+? The interface must be responsive and accessible on desktop and tablet screens.
+? Light and dark mode must be available and persist across sessions (user preference saved).
+? Error messages must be clear and user-friendly without exposing sensitive system details.
+
+8.4 Data Integrity
+? Deactivated accounts are soft-deleted — data is retained in the database.
+? All audit logs are read-only and cannot be modified or deleted by any user.
+? Previous password hashes (last 3) are stored to prevent reuse.
+
+
+
+9. Global Field Validation Rules
+
+The following validation rules apply to all text input fields throughout the system unless a specific field explicitly states otherwise.
+
+RuleDetailNo emojisEmoji characters are not permitted in any field.No excessively long textFields enforce a character maximum appropriate to their context.Allowed charactersMix of upper and lowercase letters, numbers, and field-specific punctuation (e.g., . , ? ! _ -).Security question answersHashed using bcryptjs; same character rules as general text fields.Reason/comment fieldsAllows letters (upper and lowercase), numbers, and punctuation marks: . , ? !Email fieldsMust match a valid email format; only @gmail.com accepted for login.
+
+
+10. Change Log
+
+VersionDateAuthorDescription1.02026[Author]Initial draft — Meditech BRD/SRS
+
+
+Appendix A: Open Items & Clarifications Needed
+
+The following items require stakeholder confirmation before the document can be finalized.
+
+#QuestionSectionStatus1Is patient self-registration available, or are all accounts created by the Admin?3.2Open2Is Staff access to EMRs restricted by patient assignment or open to all staff?4.2 / 6.2Open3Is appointment booking real-time (slot selection) or request-based (approval workflow)?5.1Open4Will messaging/consultation between patients and staff be included?4.1Open5Are notifications in-app only, or also via email/SMS?7Open6What is the expected concurrent user count for performance planning?8.2Open7What is the OTP delivery channel — email only, or also SMS/authenticator?3.1Open8What patient profile fields are editable by the patient vs. staff only?4.1Open9Will prescriptions and lab results be in scope for a future phase?6.1Open
