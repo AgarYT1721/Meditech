@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, Key, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 import Loader from './components/Loader';
 import './index.css';
+import { loginUser } from "./services/authService"; // addition
+import { seedDatabase } from "./seed";
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -18,6 +20,7 @@ function App() {
   const [focusedField, setFocusedField] = useState(null);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [authError, setAuthError] = useState(''); // addition
   
   // Empty Field States for Custom Validation
   const [emailEmpty, setEmailEmpty] = useState(false);
@@ -30,8 +33,9 @@ function App() {
 
   useEffect(() => {
     setTimeout(() => setIsLoaded(true), 2000);
+    seedDatabase();
   }, []);
-
+  
   // Countdown timer for OTP
   useEffect(() => {
     let timer;
@@ -47,58 +51,69 @@ function App() {
     }
   };
 
-  const handleLoginSubmit = (e) => {
-    e.preventDefault();
-    let valid = true;
-    
-    // Check for empty fields first
-    if (!email) {
-      setEmailEmpty(false);
-      setTimeout(() => setEmailEmpty(true), 10);
-      valid = false;
-    }
-    if (!password) {
-      setPasswordEmpty(false);
-      setTimeout(() => setPasswordEmpty(true), 10);
-      valid = false;
-    }
-    
-    if (!valid) return; // Stop validation if fields are empty
-    
-    // Email Validation
-    const parts = email.split('@');
-    if (parts.length === 2 && parts[1] === 'gmail.com') {
-      const prefix = parts[0];
-      if (prefix.length >= 6 && prefix.length <= 32 && 
-          /[a-z]/.test(prefix) && /[A-Z]/.test(prefix) && 
-          /\d/.test(prefix) && /[_.]/.test(prefix) && 
-          /^[a-zA-Z0-9_.]+$/.test(prefix)) {
-        setEmailError('');
-      } else {
-        setEmailError('Prefix must be 6-32 chars, mix of upper/lower/numbers/symbols(_.)');
-        valid = false;
-      }
-    } else {
-      setEmailError('Must be a valid @gmail.com address');
-      valid = false;
-    }
+  const handleLoginSubmit = async (e) => {
+  e.preventDefault();
+  let valid = true;
 
-    // Password Validation
-    if (password.length >= 15 && password.length <= 20 &&
-        /[a-z]/.test(password) && /[A-Z]/.test(password) &&
-        /\d/.test(password) && /[!@?_\-]/.test(password) &&
-        /^[a-zA-Z0-9!@?_\-]+$/.test(password)) {
-      setPasswordError('');
+  // --- your existing empty field checks ---
+  if (!email) {
+    setEmailEmpty(false);
+    setTimeout(() => setEmailEmpty(true), 10);
+    valid = false;
+  }
+  if (!password) {
+    setPasswordEmpty(false);
+    setTimeout(() => setPasswordEmpty(true), 10);
+    valid = false;
+  }
+  if (!valid) return;
+
+  // --- your existing email validation ---
+  const parts = email.split('@');
+  if (parts.length === 2 && parts[1] === 'gmail.com') {
+    const prefix = parts[0];
+    if (prefix.length >= 6 && prefix.length <= 32 &&
+        /[a-z]/.test(prefix) && /[A-Z]/.test(prefix) &&
+        /\d/.test(prefix) && /[_.]/.test(prefix) &&
+        /^[a-zA-Z0-9_.]+$/.test(prefix)) {
+      setEmailError('');
     } else {
-      setPasswordError('Must be 15-20 chars, mix of upper/lower/num/symbols(!@?_-), no emojis');
+      setEmailError('Prefix must be 6-32 chars, mix of upper/lower/numbers/symbols(_.)');
       valid = false;
     }
+  } else {
+    setEmailError('Must be a valid @gmail.com address');
+    valid = false;
+  }
 
-    if (valid) {
-      setAuthStage('otp');
-      setOtpCountdown(90);
-    }
-  };
+  // --- your existing password validation ---
+  if (password.length >= 15 && password.length <= 20 &&
+      /[a-z]/.test(password) && /[A-Z]/.test(password) &&
+      /\d/.test(password) && /[!@?_\-]/.test(password) &&
+      /^[a-zA-Z0-9!@?_\-]+$/.test(password)) {
+    setPasswordError('');
+  } else {
+    setPasswordError('Must be 15-20 chars, mix of upper/lower/num/symbols(!@?_-), no emojis');
+    valid = false;
+  }
+
+  if (!valid) return;
+
+  // --- NEW: call Firebase after all validation passes ---
+  try {
+    setAuthError('');
+    const user = await loginUser(email, password);
+
+    // Move to OTP stage on success
+    // (plug in real navigation later when dashboards are ready)
+    setAuthStage('otp');
+    setOtpCountdown(90);
+
+  } catch (err) {
+  console.error("❌ Login error:", err.code, err.message); // ⬅️ change this temporarily
+  setAuthError('Invalid email or password.');
+}
+};
 
   const handleOtpSubmit = (e) => {
     e.preventDefault();
@@ -256,6 +271,8 @@ function App() {
                 </div>
                 {passwordError && !passwordEmpty && <div className="error-text">{passwordError}</div>}
               </div>
+
+              {authError && <div className="error-text">{authError}</div>}
 
               <button type="submit" className="btn-submit">
                 Login
