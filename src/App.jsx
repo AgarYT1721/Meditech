@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { UserPlus, Key, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { UserPlus, Key, Eye, EyeOff, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { AnimatePresence } from 'framer-motion';
 import Loader from './components/Loader';
+import AdminDashboard from './components/AdminDashboard';
+import ClientDashboard from './components/ClientDashboard';
+import ClientLogin from './components/ClientLogin';
+import ClientRegister from './components/ClientRegister';
+import ClientOtpVerification from './components/ClientOtpVerification';
+import ClientForgotPassword from './components/ClientForgotPassword';
+import ClientResetPassword from './components/ClientResetPassword';
 import './index.css';
 import { loginUser } from "./services/authService"; // addition
 import { seedDatabase } from "./seed";
@@ -9,6 +17,9 @@ function App() {
   const [isLoaded, setIsLoaded] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   
+  // App States
+  const [appState, setAppState] = useState(window.innerWidth <= 768 ? 'client-auth' : 'auth'); // 'auth', 'admin'
+
   // Auth States
   const [authStage, setAuthStage] = useState('login'); // 'login', 'otp', 'change-password'
   
@@ -44,6 +55,49 @@ function App() {
     }
     return () => clearInterval(timer);
   }, [authStage, otpCountdown]);
+
+  if (appState === 'admin') {
+    return <AdminDashboard onLogout={() => setAppState('auth')} />;
+  }
+
+  if (appState.startsWith('client-') && appState !== 'client-dashboard') {
+    return (
+      <AnimatePresence mode="wait">
+        {appState === 'client-auth' && (
+          <ClientLogin key="auth" onLoginSuccess={() => setAppState('client-dashboard')} onNavigateRegister={() => setAppState('client-register')} onNavigateForgot={() => setAppState('client-forgot-password')} />
+        )}
+        {appState === 'client-register' && (
+          <motion.div key="register" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', height: '100%' }}>
+            <ClientRegister onRegisterSubmit={(data) => setAppState('client-register-otp')} onBackToLogin={() => setAppState('client-auth')} />
+          </motion.div>
+        )}
+        {appState === 'client-register-otp' && (
+          <motion.div key="otp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', height: '100%' }}>
+            <ClientOtpVerification onOtpSuccess={() => setAppState('client-dashboard')} onBackToRegister={() => setAppState('client-register')} />
+          </motion.div>
+        )}
+        {appState === 'client-forgot-password' && (
+          <motion.div key="forgot" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', height: '100%' }}>
+            <ClientForgotPassword onSubmitEmail={() => setAppState('client-forgot-otp')} onBackToLogin={() => setAppState('client-auth')} />
+          </motion.div>
+        )}
+        {appState === 'client-forgot-otp' && (
+          <motion.div key="forgot-otp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', height: '100%' }}>
+            <ClientOtpVerification onOtpSuccess={() => setAppState('client-reset-password')} onBackToRegister={() => setAppState('client-forgot-password')} />
+          </motion.div>
+        )}
+        {appState === 'client-reset-password' && (
+          <motion.div key="reset" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ width: '100%', height: '100%' }}>
+            <ClientResetPassword onSubmitReset={() => setAppState('client-auth')} onBackToLogin={() => setAppState('client-auth')} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+
+  if (appState === 'client-dashboard') {
+    return <ClientDashboard onLogout={() => setAppState('client-auth')} />;
+  }
 
   const handleKeyEvent = (e) => {
     if (e.getModifierState) {
@@ -110,7 +164,7 @@ function App() {
     setOtpCountdown(90);
 
   } catch (err) {
-  console.error("❌ Login error:", err.code, err.message); // ⬅️ change this temporarily
+  console.error("❌ Login error:", err.code, err.message); 
   setAuthError('Invalid email or password.');
 }
 };
@@ -278,8 +332,12 @@ function App() {
                 Login
               </button>
               
-              <button type="button" className="btn-secondary">
-                <UserPlus size={14} /> Sign Up
+              <button type="button" className="btn-secondary" style={{marginTop: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444'}} onClick={() => setAuthStage('change-password')}>
+                <AlertTriangle size={14} /> [DEV] Simulate Staff First Login
+              </button>
+              
+              <button type="button" className="btn-secondary" style={{marginTop: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10b981'}} onClick={() => setAppState('admin')}>
+                <ShieldCheck size={14} /> [DEV] Jump to Admin Dashboard
               </button>
             </form>
           )}
