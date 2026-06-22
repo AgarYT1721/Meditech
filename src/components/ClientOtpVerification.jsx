@@ -3,7 +3,7 @@ import { ShieldCheck, ArrowLeft, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Logo from './Logo';
 
-const ClientOtpVerification = ({ onOtpSuccess, onBackToRegister }) => {
+const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
   const [otp, setOtp] = useState('');
   const [countdown, setCountdown] = useState(90);
   const [status, setStatus] = useState('idle'); // 'idle', 'error', 'success', 'cascading-out'
@@ -23,24 +23,38 @@ const ClientOtpVerification = ({ onOtpSuccess, onBackToRegister }) => {
     return () => clearInterval(timer);
   }, [countdown]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (otp.length === 6) {
-      if (otp === '123456') { // Mock correct OTP
-        setStatus('success');
-        setTimeout(() => {
-          onOtpSuccess();
-        }, 1500);
-      } else {
-        setStatus('error');
-        // Wait 800ms so the user sees the shake and "Wrong OTP"
-        setTimeout(() => {
-          setStatus('cascading-out'); // Trigger the cascade animation
-          
+      try {
+        const response = await fetch('/api/verify-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code: otp })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+          setStatus('success');
           setTimeout(() => {
-            setOtp('');
-            setStatus('idle');
-          }, 600); // Wait for the cascade to finish (6 boxes * 0.05 stagger + duration)
+            onOtpSuccess();
+          }, 1500);
+        } else {
+          setStatus('error');
+          setTimeout(() => {
+            setStatus('cascading-out'); 
+            setTimeout(() => {
+              setOtp('');
+              setStatus('idle');
+            }, 600); 
+          }, 800);
+        }
+      } catch (err) {
+        console.error("OTP Verification Error:", err);
+        setStatus('error');
+        setTimeout(() => {
+          setStatus('cascading-out');
+          setTimeout(() => { setOtp(''); setStatus('idle'); }, 600);
         }, 800);
       }
     }

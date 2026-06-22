@@ -1,31 +1,107 @@
-import React, { useState } from 'react';
-import { Users, Activity, Calendar, FileText, Search, Plus, Filter, Edit2, ShieldAlert, RotateCcw, Power, ShieldCheck, ChevronRight, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Users, Activity, Calendar, FileText, Search, Plus, Filter, Edit2, ShieldAlert, RotateCcw, Power, ShieldCheck, ChevronRight, LogOut, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { getAllSystemUsers, toggleUserStatus, provisionAccount, getAuditLogs, updateUserDetails } from '../services/adminService';
 import '../index.css';
 
-const mockUsers = [
-  { id: 'USR-1001', name: 'Dr. Sarah Connor', role: 'Staff', dept: 'Cardiology', status: 'Active', email: 's.connor@meditech.org', joined: '2026-01-15' },
-  { id: 'USR-1002', name: 'John Doe', role: 'Patient', dept: 'N/A', status: 'Active', email: 'johndoe@gmail.com', joined: '2026-02-20' },
-  { id: 'USR-1003', name: 'Nurse Joy', role: 'Staff', dept: 'Pediatrics', status: 'Disabled', email: 'n.joy@meditech.org', joined: '2025-11-05' },
-  { id: 'USR-1004', name: 'Admin Root', role: 'Admin', dept: 'IT', status: 'Active', email: 'admin@meditech.org', joined: '2024-05-10' },
-  { id: 'USR-1005', name: 'Jane Smith', role: 'Patient', dept: 'N/A', status: 'Deactivated', email: 'j.smith99@gmail.com', joined: '2026-03-01' },
-];
-
-const mockLogs = [
-  { id: 'LOG-001', time: '2026-06-10 09:15:22', action: 'CREATE_USER', record: 'USR-1006', user: 'Admin Root' },
-  { id: 'LOG-002', time: '2026-06-10 09:42:01', action: 'UPDATE_EMR', record: 'EMR-P-1002', user: 'Dr. Sarah Connor' },
-  { id: 'LOG-003', time: '2026-06-10 10:05:18', action: 'FAILED_LOGIN', record: 'AUTH_SYS', user: 'Unknown (IP: 192.168.1.5)' },
-  { id: 'LOG-004', time: '2026-06-10 11:30:45', action: 'DEACTIVATE_USER', record: 'USR-1005', user: 'Admin Root' },
-];
-
 export default function AdminDashboard({ onLogout }) {
-  const [activeNav, setActiveNav] = useState('users'); // 'users', 'logs', 'appointments', 'records'
-  const [userStatusTab, setUserStatusTab] = useState('Active'); // 'Active', 'Disabled', 'Deactivated'
+  const [activeNav, setActiveNav] = useState('users'); // 'users', 'logs'
+  const [userStatusTab, setUserStatusTab] = useState('Active'); // 'Active', 'Disabled'
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('All');
+  
+  const [users, setUsers] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({ role: 'Patient', fullName: '', email: '', password: '', department: '' });
+  const [adding, setAdding] = useState(false);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({ id: '', role: '', fullName: '', department: '' });
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [u, l] = await Promise.all([
+        getAllSystemUsers(),
+        getAuditLogs()
+      ]);
+      setUsers(u);
+      setLogs(l);
+    } catch (error) {
+      console.error("Failed to fetch admin data", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (uid, isCurrentlyActive) => {
+    try {
+      await toggleUserStatus(uid, isCurrentlyActive);
+      fetchData(); // Refresh table
+    } catch (error) {
+      console.error("Failed to toggle user", error);
+      alert("Error changing user status");
+    }
+  };
+
+  const handleProvisionSubmit = async () => {
+    if (!addForm.fullName || !addForm.email || !addForm.password) {
+      alert("Please fill out all fields.");
+      return;
+    }
+    setAdding(true);
+    try {
+      await provisionAccount(addForm.email, addForm.password, addForm.role, addForm.fullName, addForm.department);
+      setShowAddModal(false);
+      setAddForm({ role: 'Patient', fullName: '', email: '', password: '', department: '' });
+      fetchData();
+    } catch (error) {
+      console.error("Failed to provision account", error);
+      alert("Failed to provision account: " + error.message);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const openEditModal = (u) => {
+    setEditForm({
+      id: u.id,
+      role: u.role,
+      fullName: u.name,
+      department: u.dept
+    });
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async () => {
+    if (!editForm.fullName) {
+      alert("Full name cannot be empty.");
+      return;
+    }
+    setEditing(true);
+    try {
+      await updateUserDetails(editForm.id, editForm.role, editForm.fullName, editForm.department);
+      setShowEditModal(false);
+      fetchData();
+    } catch (error) {
+      console.error("Failed to update user", error);
+      alert("Failed to update user: " + error.message);
+    } finally {
+      setEditing(false);
+    }
+  };
 
   // Filter users
-  const filteredUsers = mockUsers.filter(u => {
+  const filteredUsers = users.filter(u => {
     const matchStatus = u.status === userStatusTab;
     const matchRole = roleFilter === 'All' || u.role === roleFilter;
     const matchSearch = u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.id.toLowerCase().includes(searchQuery.toLowerCase()) || u.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -147,7 +223,7 @@ export default function AdminDashboard({ onLogout }) {
             {/* Controls */}
             <div className="table-controls">
               <div className="tabs">
-                {['Active', 'Disabled', 'Deactivated'].map(tab => (
+                {['Active', 'Disabled'].map(tab => (
                   <button 
                     key={tab} 
                     className={`tab-btn ${userStatusTab === tab ? 'active' : ''}`}
@@ -203,7 +279,16 @@ export default function AdminDashboard({ onLogout }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredUsers.length > 0 ? filteredUsers.map(u => (
+                  {loading ? (
+                    <tr>
+                      <td colSpan="7" className="text-center py-4">
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+                          <Loader2 size={24} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+                          Fetching records from databanks...
+                        </div>
+                      </td>
+                    </tr>
+                  ) : filteredUsers.length > 0 ? filteredUsers.map(u => (
                     <tr key={u.id}>
                       <td className="tech-font">{u.id}</td>
                       <td className="font-bold">{u.name}</td>
@@ -216,10 +301,9 @@ export default function AdminDashboard({ onLogout }) {
                       </td>
                       <td>
                         <div className="action-buttons">
-                          <button className="btn-icon" title="Edit User"><Edit2 size={16} /></button>
-                          {u.status === 'Active' && <button className="btn-icon text-danger" title="Deactivate"><Power size={16} /></button>}
-                          {u.status === 'Disabled' && <button className="btn-icon text-warning" title="Recover Account"><RotateCcw size={16} /></button>}
-                          {u.status === 'Deactivated' && <button className="btn-icon text-success" title="Reactivate"><RotateCcw size={16} /></button>}
+                          <button className="btn-icon" title="Edit User" onClick={() => openEditModal(u)}><Edit2 size={16} /></button>
+                          {u.status === 'Active' && <button className="btn-icon text-danger" title="Deactivate" onClick={() => handleToggleStatus(u.id, true)}><Power size={16} /></button>}
+                          {u.status === 'Disabled' && <button className="btn-icon text-success" title="Reactivate" onClick={() => handleToggleStatus(u.id, false)}><RotateCcw size={16} /></button>}
                         </div>
                       </td>
                     </tr>
@@ -241,22 +325,39 @@ export default function AdminDashboard({ onLogout }) {
                 <thead>
                   <tr>
                     <th>TIMESTAMP</th>
-                    <th>EVENT_HASH</th>
+                    <th>LOG_ID</th>
                     <th>ACTION_TYPE</th>
                     <th>TARGET_RECORD</th>
                     <th>EXECUTING_USER</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {mockLogs.map(log => (
-                    <tr key={log.id}>
-                      <td className="text-primary">{log.time}</td>
-                      <td className="text-muted">{log.id}</td>
-                      <td className={log.action.includes('FAILED') ? 'text-danger' : 'text-success'}>[{log.action}]</td>
-                      <td>{log.record}</td>
-                      <td>{log.user}</td>
+                  {loading ? (
+                    <tr>
+                      <td colSpan="5" className="text-center py-4">
+                        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px' }}>
+                          <Loader2 size={24} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+                          Fetching logs from databanks...
+                        </div>
+                      </td>
                     </tr>
-                  ))}
+                  ) : logs.length > 0 ? logs.map(log => {
+                    const date = new Date(log.time);
+                    const formattedTime = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+                    return (
+                      <tr key={log.id}>
+                        <td className="text-primary">{formattedTime}</td>
+                        <td className="text-muted">{log.id}</td>
+                        <td className={log.action.includes('DEACTIVATE') ? 'text-danger' : 'text-success'}>[{log.action}]</td>
+                        <td>{log.targetRecord}</td>
+                        <td>{log.user}</td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr>
+                      <td colSpan="5" className="text-center py-4">No audit logs found.</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -265,42 +366,116 @@ export default function AdminDashboard({ onLogout }) {
       </main>
 
       {/* Add User Modal (Slide-Out Panel) */}
-      {showAddModal && (
-        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
-          <div className="modal-content slide-panel" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="auth-title" style={{fontSize: '1.25rem', marginBottom: 0, color: '#0f172a'}}>PROVISION ACCOUNT</h3>
-              <button className="btn-icon" onClick={() => setShowAddModal(false)}>×</button>
-            </div>
-            <div className="modal-body auth-form" style={{animation: 'none', gap: '1.5rem', flex: 1, overflowY: 'auto'}}>
-              <div className="form-group">
-                <label>SYSTEM ROLE</label>
-                <select className="form-input" style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}}>
-                  <option>Patient</option>
-                  <option>Staff</option>
-                </select>
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div 
+            className="modal-overlay" 
+            onClick={() => setShowAddModal(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div 
+              className="modal-content slide-panel" 
+              onClick={e => e.stopPropagation()}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            >
+              <div className="modal-header">
+                <h3 className="auth-title" style={{fontSize: '1.25rem', marginBottom: 0, color: '#0f172a'}}>PROVISION ACCOUNT</h3>
+                <button className="btn-icon" onClick={() => setShowAddModal(false)}>×</button>
               </div>
-              <div className="form-group">
-                <label>FULL NAME</label>
-                <input type="text" className="form-input" placeholder="e.g. Jane Doe" style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+              <div className="modal-body auth-form" style={{animation: 'none', gap: '1.5rem', flex: 1, overflowY: 'auto'}}>
+                <div className="form-group">
+                  <label>SYSTEM ROLE</label>
+                  <select className="form-input" value={addForm.role} onChange={e => setAddForm({...addForm, role: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}}>
+                    <option value="Patient">Patient</option>
+                    <option value="Staff">Staff</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>FULL NAME</label>
+                  <input type="text" className="form-input" placeholder="e.g. Jane Doe" value={addForm.fullName} onChange={e => setAddForm({...addForm, fullName: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                </div>
+                {addForm.role === 'Staff' && (
+                  <div className="form-group">
+                    <label>DEPARTMENT / SPECIALIZATION</label>
+                    <input type="text" className="form-input" placeholder="e.g. Cardiology" value={addForm.department} onChange={e => setAddForm({...addForm, department: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>EMAIL (@gmail.com)</label>
+                  <input type="email" className="form-input" placeholder="user@gmail.com" value={addForm.email} onChange={e => setAddForm({...addForm, email: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                </div>
+                <div className="form-group">
+                  <label>DEFAULT PASSCODE</label>
+                  <input type="text" className="form-input" placeholder="e.g. Password123!" value={addForm.password} onChange={e => setAddForm({...addForm, password: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                  <span className="error-text" style={{color: '#64748b'}}>Minimum 6 characters required by Auth system.</span>
+                </div>
               </div>
-              <div className="form-group">
-                <label>EMAIL (@gmail.com)</label>
-                <input type="email" className="form-input" placeholder="user@gmail.com" style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
+              <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
+                <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button className="btn-submit" disabled={adding} style={{flex: 2, marginTop: 0, background: '#0f172a', opacity: adding ? 0.7 : 1, cursor: adding ? 'not-allowed' : 'pointer'}} onClick={handleProvisionSubmit}>
+                  {adding ? 'Initializing...' : 'Initialize Account'}
+                </button>
               </div>
-              <div className="form-group">
-                <label>DEFAULT PASSCODE</label>
-                <input type="text" className="form-input" placeholder="e.g. YYYYMMDD" style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
-                <span className="error-text" style={{color: '#64748b'}}>User will be forced to change this upon first login.</span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit User Modal */}
+      <AnimatePresence>
+        {showEditModal && (
+          <motion.div 
+            className="modal-overlay" 
+            onClick={() => setShowEditModal(false)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <motion.div 
+              className="modal-content slide-panel" 
+              onClick={e => e.stopPropagation()}
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            >
+              <div className="modal-header">
+                <h3 className="auth-title" style={{fontSize: '1.25rem', marginBottom: 0, color: '#0f172a'}}>EDIT RECORD</h3>
+                <button className="btn-icon" onClick={() => setShowEditModal(false)}>×</button>
               </div>
-            </div>
-            <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
-              <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowAddModal(false)}>Cancel</button>
-              <button className="btn-submit" style={{flex: 2, marginTop: 0, background: '#0f172a'}} onClick={() => setShowAddModal(false)}>Initialize Account</button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="modal-body auth-form" style={{animation: 'none', gap: '1.5rem', flex: 1, overflowY: 'auto'}}>
+                <div className="form-group">
+                  <label>SYSTEM ROLE (LOCKED)</label>
+                  <input type="text" className="form-input" value={editForm.role} disabled style={{background: '#f1f5f9', borderColor: '#e2e8f0', color: '#64748b'}} />
+                </div>
+                <div className="form-group">
+                  <label>FULL NAME</label>
+                  <input type="text" className="form-input" placeholder="e.g. Jane Doe" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                </div>
+                {editForm.role === 'Staff' && (
+                  <div className="form-group">
+                    <label>DEPARTMENT / SPECIALIZATION</label>
+                    <input type="text" className="form-input" placeholder="e.g. Cardiology" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
+                <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button className="btn-submit" disabled={editing} style={{flex: 2, marginTop: 0, background: '#0f172a', opacity: editing ? 0.7 : 1, cursor: editing ? 'not-allowed' : 'pointer'}} onClick={handleEditSubmit}>
+                  {editing ? 'Updating...' : 'Save Changes'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

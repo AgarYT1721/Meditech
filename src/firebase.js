@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyC-eQTFgV_VsHrIWKxqp_txqNvFJOV8h_c",
   authDomain: "meditech-656be.firebaseapp.com",
   projectId: "meditech-656be",

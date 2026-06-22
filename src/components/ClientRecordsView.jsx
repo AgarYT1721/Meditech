@@ -1,8 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { FileText, Download, Eye, Activity } from 'lucide-react';
+import { FileText, Download, Eye, Activity, Loader2 } from 'lucide-react';
+import { getPatientRecords } from '../services/recordService';
 
-const ClientRecordsView = () => {
+const ClientRecordsView = ({ clientUid }) => {
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchRecords = async () => {
+      try {
+        const data = await getPatientRecords(clientUid);
+        setRecords(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchRecords();
+  }, []);
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: { opacity: 1, transition: { staggerChildren: 0.1 } }
@@ -13,12 +30,7 @@ const ClientRecordsView = () => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
 
-  const mockRecords = [
-    { id: 1, type: 'Lab Result', title: 'Comprehensive Blood Panel', date: '01 Oct 2026', doctor: 'Dr. Sarah Jenkins', status: 'Normal' },
-    { id: 2, type: 'Clinical Note', title: 'Cardiology Consultation', date: '15 Sep 2026', doctor: 'Dr. Sarah Jenkins', status: 'Reviewed' },
-    { id: 3, type: 'Prescription', title: 'Lisinopril 10mg', date: '15 Sep 2026', doctor: 'Dr. Sarah Jenkins', status: 'Active' },
-    { id: 4, type: 'Imaging', title: 'Chest X-Ray', date: '10 Aug 2026', doctor: 'Dr. Marcus Webb', status: 'Normal' },
-  ];
+
 
   return (
     <motion.div 
@@ -36,7 +48,7 @@ const ClientRecordsView = () => {
           <div style={{ background: 'rgba(255,255,255,0.2)', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Activity size={18} />
           </div>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>12</div>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{records.length < 10 ? `0${records.length}` : records.length}</div>
           <div style={{ fontSize: '0.8rem', fontWeight: 600, opacity: 0.9 }}>Total Records</div>
         </div>
         <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', borderRadius: '16px', padding: '15px', color: '#181818', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -51,7 +63,13 @@ const ClientRecordsView = () => {
       <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1rem', fontWeight: 700, color: '#181818' }}>Recent Documents</h3>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-        {mockRecords.map((record) => (
+        {loading ? (
+          <div style={{ padding: '40px', display: 'flex', justifyContent: 'center' }}>
+            <Loader2 size={32} color="#0066ff" className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : records.length === 0 ? (
+          <div style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center', padding: '40px 0' }}>No medical records found.</div>
+        ) : records.map((record) => (
           <motion.div key={record.id} variants={itemVariants} style={{ background: '#fff', borderRadius: '16px', padding: '15px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -65,7 +83,7 @@ const ClientRecordsView = () => {
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', paddingTop: '15px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
-              <span style={{ fontSize: '0.75rem', color: '#666' }}>By {record.doctor}</span>
+              <span style={{ fontSize: '0.75rem', color: '#666' }}>By {record.doctorName}</span>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '8px', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px', color: '#181818', fontSize: '0.75rem', fontWeight: 600 }}>
                   <Eye size={14} /> View

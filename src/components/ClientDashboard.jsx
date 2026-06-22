@@ -1,14 +1,46 @@
-import React, { useState } from 'react';
-import { LogOut, Calendar, Activity, FileText, ChevronRight, CheckCircle2, Home, User, Bell, Clock, Stethoscope, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LogOut, Calendar, Activity, FileText, ChevronRight, CheckCircle2, Home, User, Bell, Clock, Stethoscope, MessageCircle, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import ClientAppointmentsView from './ClientAppointmentsView';
 import ClientRecordsView from './ClientRecordsView';
 import ClientProfileView from './ClientProfileView';
+import { getPatientProfile } from '../services/patientService';
+import { getPatientAppointments } from '../services/appointmentService';
+import { getPatientRecords } from '../services/recordService';
 import '../index.css';
 
-const ClientDashboard = ({ onLogout }) => {
+const ClientDashboard = ({ clientUid, onLogout }) => {
   const [activeTab, setActiveTab] = useState('home');
+  const [patient, setPatient] = useState(null);
+  const [upcomingAppointments, setUpcomingAppointments] = useState([]);
+  const [recentRecords, setRecentRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    try {
+      const [profileData, aptsData, recordsData] = await Promise.all([
+        getPatientProfile(clientUid),
+        getPatientAppointments(clientUid),
+        getPatientRecords(clientUid),
+      ]);
+      setPatient(profileData);
+      
+      const upcoming = aptsData.filter(a => a.status === 'pending' || a.status === 'confirmed').slice(0, 2);
+      setUpcomingAppointments(upcoming);
+      
+      setRecentRecords(recordsData.slice(0, 2));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -64,7 +96,7 @@ const ClientDashboard = ({ onLogout }) => {
             onClick={onLogout}
             style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer' }}
           >
-            <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=PatientOne" alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover', background: '#e2e8f0' }} />
+            <img src={patient?.profilePicture || (patient ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${patient.uid}&backgroundColor=b6e3f4` : "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4")} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           </div>
         </div>
       </header>
@@ -81,10 +113,16 @@ const ClientDashboard = ({ onLogout }) => {
             style={{ padding: '20px' }}
           >
             {/* Greeting Section */}
-            <motion.div variants={itemVariants} style={{ marginBottom: '25px' }}>
-              <h2 style={{ margin: 0, color: '#666', fontSize: '1rem', fontWeight: 500 }}>Good morning,</h2>
-              <h1 style={{ margin: '5px 0 0 0', color: '#181818', fontSize: '1.8rem', fontWeight: 800 }}>Alex Mercer</h1>
-            </motion.div>
+            {loading ? (
+              <div style={{ padding: '40px', display: 'flex', justifyContent: 'center' }}>
+                <Loader2 size={32} color="#0066ff" className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+              </div>
+            ) : (
+              <>
+                <motion.div variants={itemVariants} style={{ marginBottom: '25px' }}>
+                  <h2 style={{ margin: 0, color: '#666', fontSize: '1rem', fontWeight: 500 }}>Good morning,</h2>
+                  <h1 style={{ margin: '5px 0 0 0', color: '#181818', fontSize: '1.8rem', fontWeight: 800 }}>{patient ? `${patient.firstName} ${patient.lastName}` : 'Guest'}</h1>
+                </motion.div>
 
             {/* Quick Actions (Horizontal Scroll) */}
             <motion.div variants={itemVariants} style={{ marginBottom: '30px' }}>
@@ -123,41 +161,30 @@ const ClientDashboard = ({ onLogout }) => {
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                {/* Card 1 */}
-                <div style={{ background: '#fff', borderRadius: '16px', padding: '15px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '15px' }}>
-                  <div style={{ background: 'rgba(0, 102, 255, 0.1)', color: '#0066ff', borderRadius: '12px', padding: '10px', textAlign: 'center', minWidth: '60px' }}>
-                    <div style={{ fontSize: '1.3rem', fontWeight: 900, fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>14</div>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', marginTop: '3px' }}>OCT</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#181818' }}>Dr. Sarah Jenkins</h4>
-                    <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px' }}>Cardiology</div>
-                    <div style={{ color: '#0066ff', fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12}/> 10:30 AM
+                {upcomingAppointments.length === 0 ? (
+                  <div style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center', padding: '20px 0' }}>No upcoming appointments.</div>
+                ) : upcomingAppointments.map((apt) => {
+                  const [year, month, day] = apt.date.split('-');
+                  const monthName = new Date(year, month - 1, day).toLocaleString('default', { month: 'short' });
+                  return (
+                    <div key={apt.id} style={{ background: '#fff', borderRadius: '16px', padding: '15px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '15px' }}>
+                      <div style={{ background: 'rgba(0, 102, 255, 0.1)', color: '#0066ff', borderRadius: '12px', padding: '10px', textAlign: 'center', minWidth: '60px' }}>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 900, fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>{day}</div>
+                        <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', marginTop: '3px' }}>{monthName}</div>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#181818' }}>Dr. {apt.staffUid.substring(0,6)}</h4>
+                        <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px' }}>{apt.reasonDescription}</div>
+                        <div style={{ color: '#0066ff', fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={12}/> {apt.time}
+                        </div>
+                      </div>
+                      <button onClick={() => setActiveTab('appointments')} style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '10px', width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818' }}>
+                        <ChevronRight size={18} />
+                      </button>
                     </div>
-                  </div>
-                  <button style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '10px', width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818' }}>
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
-
-                {/* Card 2 */}
-                <div style={{ background: '#fff', borderRadius: '16px', padding: '15px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', display: 'flex', alignItems: 'center', gap: '15px', opacity: 0.8 }}>
-                  <div style={{ background: 'rgba(0, 0, 0, 0.05)', color: '#666', borderRadius: '12px', padding: '10px', textAlign: 'center', minWidth: '60px' }}>
-                    <div style={{ fontSize: '1.3rem', fontWeight: 900, fontFamily: "'Rajdhani', sans-serif", lineHeight: 1 }}>28</div>
-                    <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', marginTop: '3px' }}>NOV</div>
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#181818' }}>General Checkup</h4>
-                    <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px' }}>Primary Care</div>
-                    <div style={{ color: '#666', fontSize: '0.75rem', fontWeight: 500, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Clock size={12}/> 02:00 PM
-                    </div>
-                  </div>
-                  <button style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '10px', width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818' }}>
-                    <ChevronRight size={18} />
-                  </button>
-                </div>
+                  );
+                })}
               </div>
             </motion.div>
 
@@ -169,42 +196,40 @@ const ClientDashboard = ({ onLogout }) => {
               </div>
 
               <div style={{ background: '#fff', borderRadius: '16px', padding: '20px', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
-                <div style={{ borderLeft: '3px solid #10b981', paddingLeft: '15px', marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#181818' }}>Blood Panel (Comprehensive)</div>
-                    <span style={{ background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', fontSize: '0.7rem', fontWeight: 700, padding: '4px 8px', borderRadius: '6px' }}>Normal</span>
+                {recentRecords.length === 0 ? (
+                  <div style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center' }}>No recent results.</div>
+                ) : recentRecords.map((rec, index) => (
+                  <div key={rec.id} style={{ borderLeft: `3px solid ${index % 2 === 0 ? '#10b981' : '#f59e0b'}`, paddingLeft: '15px', marginBottom: index === recentRecords.length - 1 ? 0 : '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#181818' }}>{rec.title}</div>
+                      <span style={{ background: index % 2 === 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)', color: index % 2 === 0 ? '#10b981' : '#f59e0b', fontSize: '0.7rem', fontWeight: 700, padding: '4px 8px', borderRadius: '6px' }}>{rec.status}</span>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '6px' }}>{rec.date}</div>
                   </div>
-                  <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '6px' }}>Oct 01, 2026</div>
-                </div>
-
-                <div style={{ borderLeft: '3px solid #f59e0b', paddingLeft: '15px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#181818' }}>Lipid Profile</div>
-                    <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', fontSize: '0.7rem', fontWeight: 700, padding: '4px 8px', borderRadius: '6px' }}>Reviewed</span>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '6px' }}>Sep 15, 2026</div>
-                </div>
+                ))}
               </div>
             </motion.div>
+            </>
+            )}
 
           </motion.main>
         )}
 
         {activeTab === 'appointments' && (
           <motion.div key="appointments" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} style={{ width: '100%', boxSizing: 'border-box' }}>
-            <ClientAppointmentsView />
+            <ClientAppointmentsView clientUid={clientUid} patientData={patient} />
           </motion.div>
         )}
 
         {activeTab === 'records' && (
           <motion.div key="records" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} style={{ width: '100%', boxSizing: 'border-box' }}>
-            <ClientRecordsView />
+            <ClientRecordsView clientUid={clientUid} />
           </motion.div>
         )}
 
         {activeTab === 'profile' && (
           <motion.div key="profile" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} style={{ width: '100%', boxSizing: 'border-box' }}>
-            <ClientProfileView onLogout={onLogout} />
+            <ClientProfileView patientData={patient} onLogout={onLogout} onProfileUpdate={fetchDashboardData} />
           </motion.div>
         )}
       </AnimatePresence>

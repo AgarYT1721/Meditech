@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, Clock, MapPin, ChevronRight, X, Plus, ChevronLeft, Heart, Globe, Briefcase, ChevronsRight, Trash2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, ChevronRight, X, Plus, ChevronLeft, Heart, Globe, Briefcase, ChevronsRight, Trash2, Loader2 } from 'lucide-react';
+import { getPatientAppointments, createAppointment, cancelAppointment } from '../services/appointmentService';
+import { getDoctors } from '../services/staffService';
 
-const ClientAppointmentsView = () => {
+const ClientAppointmentsView = ({ clientUid, patientData }) => {
   const [activeTab, setActiveTab] = useState('upcoming');
   const [showBooking, setShowBooking] = useState(false);
   const [showDoctorList, setShowDoctorList] = useState(false);
@@ -31,29 +33,66 @@ const ClientAppointmentsView = () => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
 
-  const upcomingMock = [
-    { id: 1, doctor: 'Dr. Elena Mikaelson', specialty: 'Neurologist', date: 'Oct 31, 2025', time: '10:00 AM', bookingId: '#A61138', seed: 'Elena', duration: '45 minute', languages: 'EN / ES', exp: '10 Years' },
-    { id: 2, doctor: 'Dr. Caroline Forbes', specialty: 'Cardiologist', date: 'Oct 16, 2025', time: '01:15 PM', bookingId: '#A59961', seed: 'Caroline', duration: '60 minute', languages: 'EN / FR', exp: '12 Years' },
-  ];
+  const [appointments, setAppointments] = useState([]);
+  const [doctorsList, setDoctorsList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const completedMock = [
-    { id: 3, doctor: 'Dr. Sarah Williams', specialty: 'Neurologist', date: 'Sep 19, 2025', time: '02:30 PM', bookingId: '#A59961', seed: 'Sarah', duration: '30 minute', languages: 'EN', exp: '8 Years' },
-    { id: 4, doctor: 'Dr. Damon Salvatore', specialty: 'Cardiologist', date: 'Sep 1, 2025', time: '10:30 AM', bookingId: '#A59961', seed: 'Damon', duration: '45 minute', languages: 'EN / IT', exp: '15 Years' },
-  ];
+  useEffect(() => {
+    fetchData();
+  }, []);
 
-  const cancelledMock = [
-    { id: 5, doctor: 'Dr. Stefan Salvatore', specialty: 'Cardiologist', date: 'Aug 19, 2025', time: '09:00 AM', bookingId: '#A59961', seed: 'Stefan', duration: '60 minute', languages: 'EN / DE', exp: '14 Years' },
-    { id: 6, doctor: 'Dr. Rebekah Bella', specialty: 'Neurologist', date: 'Jul 16, 2025', time: '01:45 PM', bookingId: '#A59961', seed: 'Rebekah', duration: '45 minute', languages: 'EN / RU', exp: '9 Years' },
-  ];
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [aptsData, docsData] = await Promise.all([
+        getPatientAppointments(clientUid),
+        getDoctors()
+      ]);
+      setAppointments(aptsData);
+      setDoctorsList(docsData);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const doctorsList = [
-    { id: 101, doctor: 'Dr. Klaus Gilbert', specialty: 'Dentist', seed: 'Klaus', duration: '45 minute', languages: 'EN / RU', exp: '8 Years' },
-    { id: 102, doctor: 'Dr. Sarah Jenkins', specialty: 'Cardiologist', seed: 'Sarah', duration: '60 minute', languages: 'EN / FR', exp: '12 Years' },
-    { id: 103, doctor: 'Dr. Marcus Webb', specialty: 'Dermatologist', seed: 'Marcus', duration: '30 minute', languages: 'EN / ES', exp: '5 Years' },
-    { id: 104, doctor: 'Dr. Emily Chen', specialty: 'Optometrist', seed: 'Emily', duration: '40 minute', languages: 'EN / ZH', exp: '10 Years' },
-  ];
+  const handleBook = async () => {
+    if (!selectedDoctor) return;
+    try {
+      const aptData = {
+        patientUid: clientUid,
+        patientName: patientData ? `${patientData.firstName} ${patientData.lastName}` : "Unknown Patient",
+        staffUid: selectedDoctor.uid || selectedDoctor.id,
+        reasonId: "R01",
+        reasonDescription: "General Checkup",
+        date: `2026-10-${String(selectedDate).padStart(2, '0')}`,
+        time: selectedTime,
+        status: "pending"
+      };
+      await createAppointment(aptData);
+      setShowBooking(false);
+      fetchData(); // refresh list
+      setActiveTab('upcoming');
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-  const currentList = activeTab === 'upcoming' ? upcomingMock : activeTab === 'completed' ? completedMock : cancelledMock;
+  const handleCancel = async (id) => {
+    try {
+      await cancelAppointment(id);
+      fetchData(); // refresh list
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const upcomingList = appointments.filter(a => a.status === 'pending' || a.status === 'confirmed');
+  const completedList = appointments.filter(a => a.status === 'completed');
+  const cancelledList = appointments.filter(a => a.status === 'cancelled');
+
+  const currentList = activeTab === 'upcoming' ? upcomingList : activeTab === 'completed' ? completedList : cancelledList;
 
   return (
     <motion.div 
@@ -94,7 +133,13 @@ const ClientAppointmentsView = () => {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {currentList.map((apt) => (
+        {loading ? (
+          <div style={{ padding: '40px', display: 'flex', justifyContent: 'center' }}>
+            <Loader2 size={32} color="#0066ff" className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+          </div>
+        ) : currentList.length === 0 ? (
+          <div style={{ color: '#888', fontSize: '0.9rem', textAlign: 'center', padding: '40px 0' }}>No {activeTab} appointments found.</div>
+        ) : currentList.map((apt) => (
           <motion.div key={apt.id} variants={itemVariants} style={{ background: '#fff', borderRadius: '24px', padding: '20px', boxShadow: '0 8px 25px rgba(0,0,0,0.04)' }}>
             
             {/* Top Row */}
@@ -103,10 +148,7 @@ const ClientAppointmentsView = () => {
               
               {activeTab === 'upcoming' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 500 }}>Remind me</span>
-                  <div style={{ width: '36px', height: '20px', background: '#0066ff', borderRadius: '20px', display: 'flex', alignItems: 'center', padding: '2px', cursor: 'pointer' }}>
-                    <div style={{ width: '16px', height: '16px', background: '#fff', borderRadius: '50%', transform: 'translateX(16px)' }}></div>
-                  </div>
+                  <span style={{ fontSize: '0.75rem', color: '#888', fontWeight: 500, textTransform: 'capitalize' }}>{apt.status}</span>
                 </div>
               ) : (
                 <div style={{ color: '#888', cursor: 'pointer' }}>
@@ -118,16 +160,16 @@ const ClientAppointmentsView = () => {
             {/* Middle Row (Doctor Info) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
               <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#f0f2f5', padding: '3px', flexShrink: 0 }}>
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${apt.seed}&backgroundColor=e2e8f0`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${apt.staffUid}&backgroundColor=e2e8f0`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>{apt.doctor}</h4>
-                <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px', marginBottom: '6px' }}>{apt.specialty}</div>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>Dr. {apt.staffUid.substring(0,6)}</h4>
+                <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px', marginBottom: '6px' }}>{apt.reasonDescription}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ background: 'rgba(0,102,255,0.1)', color: '#0066ff', borderRadius: '4px', padding: '2px', display: 'flex', alignItems: 'center' }}>
                     <MapPin size={12} /> {/* Placeholder for booking ID icon */}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>Booking ID: <span style={{ color: '#0066ff' }}>{apt.bookingId}</span></span>
+                  <span style={{ fontSize: '0.75rem', color: '#666', fontWeight: 600 }}>ID: <span style={{ color: '#0066ff' }}>{apt.id.substring(0,6)}</span></span>
                 </div>
               </div>
             </div>
@@ -136,13 +178,13 @@ const ClientAppointmentsView = () => {
             <div style={{ display: 'flex', gap: '15px' }}>
               {activeTab === 'upcoming' && (
                 <>
-                  <button style={{ flex: 1, background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={() => { setSelectedDoctor(apt); setShowBooking(true); }} style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Reschedule</button>
+                  <button onClick={() => handleCancel(apt.id)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Cancel</button>
+                  <button onClick={() => { /* stub */ }} style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Reschedule</button>
                 </>
               )}
               {activeTab === 'completed' && (
                 <>
-                  <button onClick={() => { setSelectedDoctor(apt); setShowBooking(true); }} style={{ flex: 1, background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Re-book</button>
+                  <button style={{ flex: 1, background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Re-book</button>
                   <button style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Visit summary</button>
                 </>
               )}
@@ -198,11 +240,11 @@ const ClientAppointmentsView = () => {
                   style={{ background: '#fff', borderRadius: '24px', padding: '15px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.04)', cursor: 'pointer' }}
                 >
                   <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#f0f2f5', padding: '3px', flexShrink: 0 }}>
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${doc.seed}&backgroundColor=e2e8f0`} alt={doc.doctor} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${doc.uid}&backgroundColor=e2e8f0`} alt={doc.firstName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>{doc.doctor}</h4>
-                    <div style={{ color: '#888', fontSize: '0.85rem', marginTop: '2px' }}>{doc.specialty}</div>
+                    <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>Dr. {doc.firstName} {doc.lastName}</h4>
+                    <div style={{ color: '#888', fontSize: '0.85rem', marginTop: '2px' }}>{doc.specialization}</div>
                   </div>
                   <div style={{ color: '#0066ff' }}>
                     <ChevronRight size={20} />
@@ -246,13 +288,13 @@ const ClientAppointmentsView = () => {
 
             {/* Doctor Profile Card */}
             <div style={{ background: '#fff', borderRadius: '24px', padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
-              <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.doctor}</h3>
-              <div style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>{selectedDoctor.specialty}</div>
+              <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: '#181818' }}>Dr. {selectedDoctor.firstName} {selectedDoctor.lastName}</h3>
+              <div style={{ color: '#888', fontSize: '0.9rem', marginBottom: '20px' }}>{selectedDoctor.specialization}</div>
 
               <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '20px' }}>
                 {/* Photo */}
                 <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#f0f2f5', padding: '5px', flexShrink: 0 }}>
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedDoctor.seed}&backgroundColor=c0aede`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedDoctor.uid}&backgroundColor=c0aede`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 </div>
                 
                 {/* Stats */}
@@ -275,7 +317,7 @@ const ClientAppointmentsView = () => {
                     <div style={{ color: '#0066ff', background: 'rgba(0,102,255,0.1)', padding: '6px', borderRadius: '50%' }}><Briefcase size={14} /></div>
                     <div>
                       <div style={{ fontSize: '0.65rem', color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Experience</div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.exp}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.exp || '10 Years'}</div>
                     </div>
                   </div>
                 </div>
@@ -339,7 +381,7 @@ const ClientAppointmentsView = () => {
 
             {/* Book Button */}
             <button 
-              onClick={() => setShowBooking(false)}
+              onClick={handleBook}
               style={{ 
                 width: '100%', 
                 padding: '20px', 

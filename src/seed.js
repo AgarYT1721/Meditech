@@ -99,5 +99,123 @@ export const seedDatabase = async () => {
   });
   console.log("✅ tblstaff seeded");
 
+  // ── Patients ───────────────────────────────────────────────
+
+  const patient1Uid = "patient1-uid-mock";
+  const patient2Uid = "patient2-uid-mock";
+
+  await setDoc(doc(db, "tblusers", patient1Uid), {
+    uid: patient1Uid,
+    email: "alex.mercer@mock.com",
+    role_id: 1, // patient
+    isActive: true,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, "tblpatients", patient1Uid), {
+    uid: patient1Uid,
+    firstName: "Alex",
+    lastName: "Mercer",
+    contactNumber: "09123456789",
+    dateOfBirth: "1990-05-15",
+    gender: "Male",
+    bloodType: "O+",
+    isActive: true,
+  });
+
+  await setDoc(doc(db, "tblusers", patient2Uid), {
+    uid: patient2Uid,
+    email: "sarah.connor@mock.com",
+    role_id: 1, // patient
+    isActive: true,
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, "tblpatients", patient2Uid), {
+    uid: patient2Uid,
+    firstName: "Sarah",
+    lastName: "Connor",
+    contactNumber: "09987654321",
+    dateOfBirth: "1985-11-20",
+    gender: "Female",
+    bloodType: "A-",
+    isActive: true,
+  });
+  console.log("✅ tblpatients seeded");
+
+  // ── Appointments ───────────────────────────────────────────
+
+  // We'll create some dates relative to today
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+
+  await setDoc(doc(db, "tblappointments", "apt-1"), {
+    appointmentId: "apt-1",
+    patientUid: patient1Uid,
+    patientName: "Alex Mercer",
+    staffUid: TEST_USER_UID,
+    reasonId: "R01",
+    reasonDescription: "General Checkup",
+    date: todayStr,
+    time: "10:30 AM",
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, "tblappointments", "apt-2"), {
+    appointmentId: "apt-2",
+    patientUid: patient2Uid,
+    patientName: "Sarah Connor",
+    staffUid: TEST_USER_UID,
+    reasonId: "R02",
+    reasonDescription: "Follow-up Consultation",
+    date: todayStr,
+    time: "02:15 PM",
+    status: "pending",
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, "tblappointments", "apt-3"), {
+    appointmentId: "apt-3",
+    patientUid: patient1Uid,
+    patientName: "Alex Mercer",
+    staffUid: TEST_USER_UID,
+    reasonId: "R04",
+    reasonDescription: "Lab Results Review",
+    date: todayStr,
+    time: "04:00 PM",
+    status: "confirmed",
+    createdAt: serverTimestamp(),
+  });
+  console.log("✅ tblappointments seeded");
+
+  // ── Records ───────────────────────────────────────────────
+  await setDoc(doc(db, "tblrecords", "rec-1"), {
+    recordId: "rec-1",
+    patientUid: patient1Uid,
+    type: "Lab Result",
+    title: "Comprehensive Blood Panel",
+    date: "2026-10-01",
+    doctorName: "Dr. Test Doctor",
+    status: "Normal",
+    createdAt: serverTimestamp(),
+  });
+
+  await setDoc(doc(db, "tblrecords", "rec-2"), {
+    recordId: "rec-2",
+    patientUid: patient1Uid,
+    type: "Clinical Note",
+    title: "Cardiology Consultation",
+    date: "2026-09-15",
+    doctorName: "Dr. Sarah Jenkins",
+    status: "Reviewed",
+    createdAt: serverTimestamp(),
+  });
+
+  console.log("✅ tblrecords seeded");
+
   console.log("🎉 All done! Database fully seeded.");
 };

@@ -455,7 +455,7 @@ body {
   align-items: center;
 }
 
-.btn-icon {
+.input-wrapper .btn-icon {
   position: absolute;
   right: 1rem;
   background: none;
@@ -468,7 +468,7 @@ body {
   align-items: center;
   justify-content: center;
 }
-.btn-icon:hover {
+.input-wrapper .btn-icon:hover {
   color: var(--text-main);
 }
 
@@ -578,9 +578,10 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .dash-user-card:hover { background: rgba(255,255,255,1); border-color: rgba(0, 102, 255, 0.4); box-shadow: 0 5px 20px rgba(0, 102, 255, 0.1); }
 .dash-user-card .avatar { width: 32px; height: 32px; border-radius: 6px; overflow: hidden; background: #181818; display: flex; align-items: center; justify-content: center; color: white; border: none; }
 .dash-user-card .avatar img { width: 100%; height: 100%; object-fit: cover; }
-.dash-user-card .info { flex: 1; }
-.dash-user-card .name { font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.9rem; color: #181818; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
-.dash-user-card .role { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; color: #888888; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; text-transform: uppercase; }
+.dash-user-card .info { flex: 1; min-width: 0; }
+.dash-user-card .name { font-family: 'Rajdhani', sans-serif; font-weight: 800; font-size: 0.9rem; color: #181818; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-user-card .role { font-family: 'JetBrains Mono', monospace; font-size: 0.55rem; color: #888888; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.dash-user-card .btn-icon { position: static; margin-left: auto; right: auto; }
 
 /* Main Content */
 .dash-main { flex: 1; display: flex; flex-direction: column; position: relative; z-index: 1; background: transparent; padding: 20px 20px 30px 10px; gap: 20px; }
@@ -706,14 +707,53 @@ input[type="password"]::-webkit-credentials-auto-fill-button {
 .cl-value::after { display: none; }
 .up-value { display: flex; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; font-weight: bold; color: #00b86b; align-items: center; gap: 0.5rem; }
 .up-value .status-dot { margin: 0; box-shadow: 0 0 8px rgba(0, 184, 107, 0.5); }
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 1000;
+    display: flex;
+    justify-content: flex-end;
+}
 
 .modal-content.slide-panel {
     background: #ffffff;
     border-left: 1px solid rgba(0,0,0,0.05);
     box-shadow: -10px 0 30px rgba(0,0,0,0.05);
+    width: 450px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
 
+.modal-body {
+    padding: 2rem;
+    flex: 1;
+    overflow-y: auto;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideLeft {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+}
 /* Dashboard Animations */
 @keyframes slideUpFade {
     0% { opacity: 0; transform: translateY(30px); }
