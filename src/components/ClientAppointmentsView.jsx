@@ -1,21 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Clock, MapPin, ChevronRight, X, Plus, ChevronLeft, Heart, Globe, Briefcase, ChevronsRight, Trash2, Loader2 } from 'lucide-react';
-import { getPatientAppointments, createAppointment, cancelAppointment } from '../services/appointmentService';
+import { getPatientAppointments, createAppointment, cancelAppointment, updateAppointmentDate } from '../services/appointmentService';
 import { getDoctors } from '../services/staffService';
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) return timeStr;
+  const [h, m] = timeStr.split(':');
+  let hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${m} ${ampm}`;
+};
 
 const ClientAppointmentsView = ({ clientUid, patientData }) => {
   const [activeTab, setActiveTab] = useState('upcoming');
   const [showBooking, setShowBooking] = useState(false);
   const [showDoctorList, setShowDoctorList] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(9);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
   const [selectedTime, setSelectedTime] = useState('04:45 PM');
+  const [rescheduleAptId, setRescheduleAptId] = useState(null);
 
-  const dates = [
-    { d: 6, day: 'Fri' }, { d: 7, day: 'Sat' }, { d: 8, day: 'Sun' },
-    { d: 9, day: 'Mon' }, { d: 10, day: 'Tue' }, { d: 11, day: 'Wed' }, { d: 12, day: 'Thu' }
-  ];
+  const dates = React.useMemo(() => {
+    const result = [];
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const today = new Date();
+    for (let i = 0; i < 14; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      result.push({ d: d.getDate(), day: days[d.getDay()], dateStr });
+    }
+    return result;
+  }, []);
 
   const times = [
     '09:00 AM', '10:30 AM', '11:45 AM',
@@ -48,7 +70,17 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
         getPatientAppointments(clientUid),
         getDoctors()
       ]);
-      setAppointments(aptsData);
+      
+      const enhancedApts = aptsData.map(apt => {
+        const doctor = docsData.find(d => d.uid === apt.staffUid || d.id === apt.staffUid);
+        return { 
+          ...apt, 
+          staffName: doctor ? `${doctor.firstName} ${doctor.lastName}` : apt.staffUid.substring(0,6),
+          staffProfilePicture: doctor?.profilePicture || null
+        };
+      });
+
+      setAppointments(enhancedApts);
       setDoctorsList(docsData);
     } catch (error) {
       console.error(error);
@@ -60,18 +92,24 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
   const handleBook = async () => {
     if (!selectedDoctor) return;
     try {
-      const aptData = {
-        patientUid: clientUid,
-        patientName: patientData ? `${patientData.firstName} ${patientData.lastName}` : "Unknown Patient",
-        staffUid: selectedDoctor.uid || selectedDoctor.id,
-        reasonId: "R01",
-        reasonDescription: "General Checkup",
-        date: `2026-10-${String(selectedDate).padStart(2, '0')}`,
-        time: selectedTime,
-        status: "pending"
-      };
-      await createAppointment(aptData);
+      const dateStr = selectedDate;
+      if (rescheduleAptId) {
+        await updateAppointmentDate(rescheduleAptId, dateStr, selectedTime);
+      } else {
+        const aptData = {
+          patientUid: clientUid,
+          patientName: patientData ? `${patientData.firstName} ${patientData.lastName}` : "Unknown Patient",
+          staffUid: selectedDoctor.uid || selectedDoctor.id,
+          reasonId: "R01",
+          reasonDescription: "General Checkup",
+          date: dateStr,
+          time: selectedTime,
+          status: "pending"
+        };
+        await createAppointment(aptData);
+      }
       setShowBooking(false);
+      setRescheduleAptId(null);
       fetchData(); // refresh list
       setActiveTab('upcoming');
     } catch (error) {
@@ -144,7 +182,7 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
             
             {/* Top Row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px', borderBottom: '1px solid rgba(0,0,0,0.04)', paddingBottom: '15px' }}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#181818' }}>{apt.date} - {apt.time}</div>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#181818' }}>{apt.date} - {formatTime(apt.time)}</div>
               
               {activeTab === 'upcoming' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -160,10 +198,10 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
             {/* Middle Row (Doctor Info) */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
               <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#f0f2f5', padding: '3px', flexShrink: 0 }}>
-                <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${apt.staffUid}&backgroundColor=e2e8f0`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={apt.staffProfilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${apt.staffUid}&backgroundColor=e2e8f0`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               </div>
               <div>
-                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>Dr. {apt.staffUid.substring(0,6)}</h4>
+                <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>Dr. {apt.staffName}</h4>
                 <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px', marginBottom: '6px' }}>{apt.reasonDescription}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                   <div style={{ background: 'rgba(0,102,255,0.1)', color: '#0066ff', borderRadius: '4px', padding: '2px', display: 'flex', alignItems: 'center' }}>
@@ -179,7 +217,14 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               {activeTab === 'upcoming' && (
                 <>
                   <button onClick={() => handleCancel(apt.id)} style={{ flex: 1, background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Cancel</button>
-                  <button onClick={() => { /* stub */ }} style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Reschedule</button>
+                  <button onClick={() => {
+                    setRescheduleAptId(apt.id);
+                    const doctor = doctorsList.find(d => d.uid === apt.staffUid || d.id === apt.staffUid);
+                    if (doctor) {
+                      setSelectedDoctor(doctor);
+                      setShowBooking(true);
+                    }
+                  }} style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Reschedule</button>
                 </>
               )}
               {activeTab === 'completed' && (
@@ -240,11 +285,11 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
                   style={{ background: '#fff', borderRadius: '24px', padding: '15px', display: 'flex', alignItems: 'center', gap: '15px', boxShadow: '0 8px 25px rgba(0,0,0,0.04)', cursor: 'pointer' }}
                 >
                   <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#f0f2f5', padding: '3px', flexShrink: 0 }}>
-                    <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${doc.uid}&backgroundColor=e2e8f0`} alt={doc.firstName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                    <img src={doc.profilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${doc.uid}&backgroundColor=e2e8f0`} alt={doc.firstName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                   </div>
                   <div style={{ flex: 1 }}>
                     <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818' }}>Dr. {doc.firstName} {doc.lastName}</h4>
-                    <div style={{ color: '#888', fontSize: '0.85rem', marginTop: '2px' }}>{doc.specialization}</div>
+                    <div style={{ color: '#888', fontSize: '0.85rem', marginTop: '2px' }}>{doc.specialization || "General Practice"}</div>
                   </div>
                   <div style={{ color: '#0066ff' }}>
                     <ChevronRight size={20} />
@@ -277,7 +322,7 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
           >
             {/* Top Bar */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', marginTop: '10px' }}>
-              <button onClick={() => { setShowBooking(false); if(showDoctorList === false) setSelectedDoctor(null); }} style={{ background: '#fff', border: 'none', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
+              <button onClick={() => { setShowBooking(false); setRescheduleAptId(null); if(showDoctorList === false) setSelectedDoctor(null); }} style={{ background: '#fff', border: 'none', width: '40px', height: '40px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818', boxShadow: '0 4px 10px rgba(0,0,0,0.05)', cursor: 'pointer' }}>
                 <ChevronLeft size={20} />
               </button>
               <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Doctor Details</h2>
@@ -294,7 +339,7 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               <div style={{ display: 'flex', width: '100%', alignItems: 'center', gap: '20px' }}>
                 {/* Photo */}
                 <div style={{ width: '100px', height: '100px', borderRadius: '50%', background: '#f0f2f5', padding: '5px', flexShrink: 0 }}>
-                  <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedDoctor.uid}&backgroundColor=c0aede`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  <img src={selectedDoctor.profilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${selectedDoctor.uid}&backgroundColor=c0aede`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
                 </div>
                 
                 {/* Stats */}
@@ -303,14 +348,14 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
                     <div style={{ color: '#0066ff', background: 'rgba(0,102,255,0.1)', padding: '6px', borderRadius: '50%' }}><Clock size={14} /></div>
                     <div>
                       <div style={{ fontSize: '0.65rem', color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Consultation time</div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.duration}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.duration || "30 Mins"}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
                     <div style={{ color: '#0066ff', background: 'rgba(0,102,255,0.1)', padding: '6px', borderRadius: '50%' }}><Globe size={14} /></div>
                     <div>
                       <div style={{ fontSize: '0.65rem', color: '#888', textTransform: 'uppercase', fontWeight: 700 }}>Languages</div>
-                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.languages}</div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#181818' }}>{selectedDoctor.languages || "English"}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
@@ -329,24 +374,23 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               {dates.map((item, idx) => (
                 <div 
                   key={idx} 
-                  onClick={() => setSelectedDate(item.d)}
+                  onClick={() => setSelectedDate(item.dateStr)}
                   style={{ 
                     display: 'flex', 
                     flexDirection: 'column', 
                     alignItems: 'center', 
-                    justifyContent: 'center', 
-                    minWidth: '55px', 
-                    height: '80px', 
+                    minWidth: '60px', 
+                    padding: '12px 0', 
                     borderRadius: '40px', 
-                    background: selectedDate === item.d ? '#0066ff' : '#fff',
-                    color: selectedDate === item.d ? '#fff' : '#181818',
-                    boxShadow: selectedDate === item.d ? '0 10px 20px rgba(0,102,255,0.3)' : '0 4px 10px rgba(0,0,0,0.02)',
+                    background: selectedDate === item.dateStr ? '#0066ff' : '#fff',
+                    color: selectedDate === item.dateStr ? '#fff' : '#181818',
+                    boxShadow: selectedDate === item.dateStr ? '0 10px 20px rgba(0,102,255,0.3)' : '0 4px 10px rgba(0,0,0,0.02)',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease'
                   }}
                 >
                   <span style={{ fontSize: '1.2rem', fontWeight: 800 }}>{item.d}</span>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: selectedDate === item.d ? 'rgba(255,255,255,0.8)' : '#888' }}>{item.day}</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: selectedDate === item.dateStr ? 'rgba(255,255,255,0.8)' : '#888' }}>{item.day}</span>
                 </div>
               ))}
             </div>
@@ -403,7 +447,7 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               <div style={{ background: '#fff', color: '#0066ff', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <ChevronsRight size={16} />
               </div>
-              Book Consultation
+              {rescheduleAptId ? "Confirm Reschedule" : "Book Consultation"}
             </button>
           </motion.div>
         )}

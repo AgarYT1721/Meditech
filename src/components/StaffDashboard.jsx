@@ -6,15 +6,33 @@ import StaffAppointmentsView from './StaffAppointmentsView';
 import StaffPatientsView from './StaffPatientsView';
 import StaffProfileView from './StaffProfileView';
 import { getStaffAppointments } from '../services/appointmentService';
+import { getPatients } from '../services/patientService';
 import '../index.css';
 
-const TEST_USER_UID = "ejCEXQ6aIRcVRcofJXqKxUZTWsZ2";
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) return timeStr;
+  const [h, m] = timeStr.split(':');
+  let hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${m} ${ampm}`;
+};
 
-const StaffDashboard = ({ onLogout }) => {
+const getGreeting = (date) => {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
+
+const StaffDashboard = ({ staffUser, setStaffUser, onLogout }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [currentTime, setCurrentTime] = useState(new Date());
   const [heroMousePos, setHeroMousePos] = useState({ x: 0, y: 0 });
   const [appointments, setAppointments] = useState([]);
+  const [targetPatientUid, setTargetPatientUid] = useState(null);
+  const [startConsultation, setStartConsultation] = useState(false);
 
   const handleHeroMouseMove = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -33,16 +51,37 @@ const StaffDashboard = ({ onLogout }) => {
   }, []);
 
   useEffect(() => {
-    fetchDashData();
-  }, []);
+    if (staffUser?.uid) {
+      fetchDashData(staffUser.uid);
+    }
+  }, [staffUser]);
 
-  const fetchDashData = async () => {
+  const fetchDashData = async (uid) => {
     try {
-      const apts = await getStaffAppointments(TEST_USER_UID);
-      setAppointments(apts);
+      const [apts, patientsData] = await Promise.all([
+        getStaffAppointments(uid),
+        getPatients()
+      ]);
+      const enhancedApts = apts.map(apt => {
+        const patient = patientsData.find(p => p.uid === apt.patientUid);
+        return { ...apt, patientProfilePicture: patient?.profilePicture || null };
+      });
+      setAppointments(enhancedApts);
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const handleViewPatientRecords = (uid) => {
+    setTargetPatientUid(uid);
+    setStartConsultation(false);
+    setActiveTab('patients');
+  };
+
+  const handleStartConsultation = (uid) => {
+    setTargetPatientUid(uid);
+    setStartConsultation(true);
+    setActiveTab('patients');
   };
 
   const containerVariants = {
@@ -181,11 +220,11 @@ const StaffDashboard = ({ onLogout }) => {
             style={{ position: 'relative', zIndex: 1, background: activeTab === 'profile' ? 'linear-gradient(145deg, #f0f9ff, #ffffff)' : 'linear-gradient(145deg, #ffffff, #f8fafc)', borderRadius: '20px', border: activeTab === 'profile' ? '1px solid #0ea5e9' : '1px solid rgba(14, 165, 233, 0.15)', display: 'flex', alignItems: 'center', padding: '14px', boxShadow: activeTab === 'profile' ? '0 10px 25px rgba(14, 165, 233, 0.15)' : '0 10px 25px rgba(0, 0, 0, 0.03)', cursor: 'pointer' }}
           >
             <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'linear-gradient(135deg, #e0f2fe, #bae6fd)', marginRight: '12px', flexShrink: 0, overflow: 'hidden', padding: '2px', boxShadow: '0 4px 12px rgba(14, 165, 233, 0.2)' }}>
-              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Klaus&backgroundColor=e0f2fe" alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+              <img src={staffUser?.profilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${staffUser?.firstName || 'Klaus'}&backgroundColor=e0f2fe`} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.2px' }}>Dr. Klaus Gilbert</div>
-              <div style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 700 }}>Dental Specialist</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.2px' }}>Dr. {staffUser?.firstName} {staffUser?.lastName}</div>
+              <div style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 700 }}>{staffUser?.specialization}</div>
             </div>
             <motion.button 
               whileHover={{ scale: 1.1, backgroundColor: '#fee2e2', color: '#ef4444' }} 
@@ -358,9 +397,10 @@ const StaffDashboard = ({ onLogout }) => {
                       <span style={{ fontSize: '3.5rem', fontWeight: 800, marginLeft: '1rem', letterSpacing: '-1px', marginBottom: '1.2rem' }}>{currentTime.getHours() >= 12 ? 'PM' : 'AM'}</span>
                     </div>
                   </div>
-                  <div style={{ position: 'relative', zIndex: 1, transform: `translate(${heroMousePos.x * 15}px, ${heroMousePos.y * 15}px)`, transition: 'transform 0.2s ease-out' }}>
-                    <h1 style={{ margin: '0 0 12px 0', fontSize: '2.8rem', fontWeight: 800, letterSpacing: '-1px', textShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>Good morning, Dr. Gilbert</h1>
-                    <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 400, opacity: 0.9, maxWidth: '600px', lineHeight: 1.5 }}>Here is your schedule and clinic overview for today. You have {appointments.length} appointments and {appointments.filter(a => a.status === 'pending').length} pending reviews.</p>
+                  <div style={{ position: 'relative', zIndex: 1, maxWidth: '60%' }}>
+                    <h1 style={{ margin: '0 0 12px 0', fontSize: '2.8rem', fontWeight: 800, letterSpacing: '-1px', textShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>{getGreeting(currentTime)}, Dr. {staffUser?.lastName || staffUser?.firstName}</h1>
+                    <p style={{ margin: 0, fontSize: '1.1rem', opacity: 0.9, lineHeight: 1.6, fontWeight: 500, letterSpacing: '0.5px' }}>
+                      Here is your schedule and clinic overview for today. You have {appointments.length} appointments and {appointments.filter(a => a.status === 'pending').length} pending reviews.</p>
                   </div>
                 </motion.div>
 
@@ -430,7 +470,7 @@ const StaffDashboard = ({ onLogout }) => {
                   <motion.div variants={itemVariants}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '20px' }}>
                       <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#0f172a' }}>Next Appointment</h3>
-                      <button style={{ background: 'none', border: 'none', color: '#0ea5e9', fontWeight: 600, cursor: 'pointer', padding: 0 }}>View All</button>
+                      <button style={{ background: 'none', border: 'none', color: '#0ea5e9', fontWeight: 600, cursor: 'pointer', padding: 0 }} onClick={() => setActiveTab('schedule')}>View All</button>
                     </div>
                     
                     <motion.div 
@@ -440,29 +480,38 @@ const StaffDashboard = ({ onLogout }) => {
                       {/* Decorative gradient blur in card */}
                       <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '250px', height: '250px', background: 'radial-gradient(circle, rgba(14, 165, 233, 0.04) 0%, transparent 70%)', filter: 'blur(20px)', zIndex: 0 }}></div>
                       
-                      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '30px', paddingBottom: '30px', borderBottom: '1px solid rgba(14, 165, 233, 0.05)' }}>
-                        <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#f8fafc', flexShrink: 0, overflow: 'hidden', border: '3px solid #ffffff', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
-                          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Patient1&backgroundColor=f8fafc" alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <h4 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>Alex Mercer</h4>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span style={{ color: '#0284c7', background: '#e0f2fe', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700 }}>Routine Checkup</span>
-                            <span style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 500 }}>ID: P-1001</span>
+                      {appointments.length > 0 ? (
+                        <>
+                          <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: '30px', marginBottom: '30px', paddingBottom: '30px', borderBottom: '1px solid rgba(14, 165, 233, 0.05)' }}>
+                            <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#f8fafc', flexShrink: 0, overflow: 'hidden', border: '3px solid #ffffff', boxShadow: '0 4px 15px rgba(0,0,0,0.05)' }}>
+                              <img src={appointments[0].patientProfilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${appointments[0].patientName}&backgroundColor=f8fafc`} alt="Patient" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <h4 style={{ margin: '0 0 8px 0', fontSize: '1.5rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.5px' }}>{appointments[0].patientName}</h4>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ color: '#0284c7', background: '#e0f2fe', padding: '4px 12px', borderRadius: '20px', fontSize: '0.85rem', fontWeight: 700 }}>{appointments[0].type || "Consultation"}</span>
+                                <span style={{ color: '#64748b', fontSize: '0.9rem', fontWeight: 500 }}>ID: {appointments[0].patientUid?.substring(0,6) || "P-N/A"}</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                              <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{appointments[0].date}</div>
+                              <div style={{ background: '#ffffff', border: '1px solid rgba(14, 165, 233, 0.2)', color: '#0f172a', padding: '8px 16px', borderRadius: '12px', fontSize: '1rem', fontWeight: 800, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                                {formatTime(appointments[0].time)}
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                          <div style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Today</div>
-                          <div style={{ background: '#ffffff', border: '1px solid rgba(14, 165, 233, 0.2)', color: '#0f172a', padding: '8px 16px', borderRadius: '12px', fontSize: '1rem', fontWeight: 800, boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-                            10:30 AM
-                          </div>
-                        </div>
-                      </div>
 
-                      <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px' }}>
-                        <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ flex: 1, background: '#ffffff', border: '1px solid rgba(14, 165, 233, 0.2)', color: '#0f172a', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>View Patient Records</motion.button>
-                        <motion.button whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(14, 165, 233, 0.3)' }} whileTap={{ scale: 0.98 }} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', border: 'none', color: '#ffffff', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 8px 20px rgba(14, 165, 233, 0.2)' }}>Start Consultation</motion.button>
-                      </div>
+                          <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '20px' }}>
+                            <motion.button onClick={() => handleViewPatientRecords(appointments[0].patientUid)} whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} style={{ flex: 1, background: '#ffffff', border: '1px solid rgba(14, 165, 233, 0.2)', color: '#0f172a', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>View Patient Records</motion.button>
+                            <motion.button onClick={() => handleStartConsultation(appointments[0].patientUid)} whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(14, 165, 233, 0.3)' }} whileTap={{ scale: 0.98 }} style={{ flex: 1, background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', border: 'none', color: '#ffffff', padding: '16px', borderRadius: '16px', fontWeight: 700, fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 8px 20px rgba(14, 165, 233, 0.2)' }}>Start Consultation</motion.button>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ textAlign: 'center', padding: '40px 0', position: 'relative', zIndex: 1 }}>
+                          <h4 style={{ color: '#64748b', fontSize: '1.2rem', fontWeight: 600 }}>No upcoming appointments</h4>
+                          <p style={{ color: '#94a3b8', fontSize: '0.95rem' }}>Your schedule is clear for now.</p>
+                        </div>
+                      )}
                     </motion.div>
                   </motion.div>
 
@@ -476,27 +525,8 @@ const StaffDashboard = ({ onLogout }) => {
                     >
                       <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '250px', height: '250px', background: 'radial-gradient(circle, rgba(16, 185, 129, 0.04) 0%, transparent 70%)', filter: 'blur(20px)', zIndex: 0 }}></div>
 
-                      <div style={{ display: 'flex', gap: '20px', marginBottom: '30px', position: 'relative', zIndex: 1 }}>
-                        <div style={{ position: 'absolute', top: '48px', left: '23px', bottom: '-30px', width: '2px', background: 'linear-gradient(to bottom, #bae6fd, #bbf7d0)' }}></div>
-                        <div style={{ background: '#e0f2fe', color: '#0ea5e9', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1, border: '2px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                          <Activity size={20} />
-                        </div>
-                        <div style={{ paddingTop: '4px' }}>
-                          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>Lab Results Uploaded</div>
-                          <div style={{ fontSize: '0.9rem', color: '#64748b', lineHeight: 1.5 }}>Blood work for Sarah Connor is ready for review.</div>
-                          <div style={{ fontSize: '0.8rem', color: '#0ea5e9', marginTop: '6px', fontWeight: 700 }}>2 hours ago</div>
-                        </div>
-                      </div>
-
-                      <div style={{ display: 'flex', gap: '20px', position: 'relative', zIndex: 1 }}>
-                        <div style={{ background: '#dcfce7', color: '#10b981', width: '48px', height: '48px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, zIndex: 1, border: '2px solid #ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-                          <Calendar size={20} />
-                        </div>
-                        <div style={{ paddingTop: '4px' }}>
-                          <div style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', marginBottom: '4px' }}>Appointment Confirmed</div>
-                          <div style={{ fontSize: '0.9rem', color: '#64748b', lineHeight: 1.5 }}>John Doe confirmed his visit for tomorrow.</div>
-                          <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '6px', fontWeight: 700 }}>4 hours ago</div>
-                        </div>
+                      <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', color: '#94a3b8', padding: '40px 0' }}>
+                        No recent activity recorded.
                       </div>
                     </motion.div>
                   </motion.div>
@@ -506,19 +536,19 @@ const StaffDashboard = ({ onLogout }) => {
 
             {activeTab === 'schedule' && (
               <motion.div key="schedule" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} style={{ width: '100%' }}>
-                <StaffAppointmentsView />
+                <StaffAppointmentsView staffUser={staffUser} />
               </motion.div>
             )}
 
             {activeTab === 'patients' && (
               <motion.div key="patients" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} style={{ width: '100%' }}>
-                <StaffPatientsView />
+                <StaffPatientsView targetPatientUid={targetPatientUid} startConsultation={startConsultation} />
               </motion.div>
             )}
 
             {activeTab === 'profile' && (
               <motion.div key="profile" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} style={{ width: '100%' }}>
-                <StaffProfileView onLogout={onLogout} />
+                <StaffProfileView staffUser={staffUser} setStaffUser={setStaffUser} onLogout={onLogout} />
               </motion.div>
             )}
           </AnimatePresence>

@@ -64,6 +64,20 @@ export const updateAppointmentStatus = async (appointmentId, newStatus) => {
   }
 };
 
+export const updateAppointmentDate = async (appointmentId, newDate, newTime) => {
+  try {
+    const appointmentRef = doc(db, "tblappointments", appointmentId);
+    await updateDoc(appointmentRef, {
+      date: newDate,
+      time: newTime,
+      status: "pending"
+    });
+  } catch (error) {
+    console.error("Error updating appointment date: ", error);
+    throw error;
+  }
+};
+
 export const createAppointment = async (appointmentData) => {
   try {
     // Generate a simple ID or use Firebase addDoc

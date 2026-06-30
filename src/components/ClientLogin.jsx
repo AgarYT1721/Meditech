@@ -40,7 +40,11 @@ const ClientLogin = ({ onLoginSuccess, onRegisterSubmit, onNavigateForgot }) => 
         }
         onLoginSuccess(user.uid);
       } catch (err) {
-        setLoginError(err.message || 'Invalid email or password.');
+        let errMsg = 'Invalid email or password.';
+        if (err.message && !err.message.includes('auth/')) {
+          errMsg = err.message;
+        }
+        setLoginError(errMsg);
         console.error("Login Error:", err);
       } finally {
         setIsLoading(false);

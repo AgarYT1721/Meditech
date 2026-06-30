@@ -1,5 +1,5 @@
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, sendPasswordResetEmail } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 export const loginUser = async (email, password) => {
@@ -11,13 +11,45 @@ export const loginUser = async (email, password) => {
   const userData = userSnap.data();
   if (!userData.isActive) throw new Error("This account has been deactivated.");
 
+  let userDetails = {};
+  if (userData.role_id === 1) {
+    const patientSnap = await getDoc(doc(db, "tblpatients", user.uid));
+    if (patientSnap.exists()) userDetails = patientSnap.data();
+  } else {
+    const staffSnap = await getDoc(doc(db, "tblstaff", user.uid));
+    if (staffSnap.exists()) userDetails = staffSnap.data();
+  }
+
   console.log("✅ Login successful:", userData);
 
   return {
     uid: user.uid,
     email: user.email,
     role_id: userData.role_id,
+    firstName: userDetails.firstName || "Unknown",
+    lastName: userDetails.lastName ?? "User",
+    specialization: userDetails.specialization || "Staff",
+    phone: userDetails.phone || "",
+    office: userDetails.office || "",
+    profilePicture: userDetails.profilePicture || null,
   };
+};
+
+export const updateStaffProfile = async (uid, phone, office) => {
+  const staffRef = doc(db, "tblstaff", uid);
+  await updateDoc(staffRef, {
+    phone,
+    office
+  });
+  console.log("✅ Staff profile updated");
+};
+
+export const updateStaffProfilePicture = async (uid, base64String) => {
+  const staffRef = doc(db, "tblstaff", uid);
+  await updateDoc(staffRef, {
+    profilePicture: base64String
+  });
+  console.log("✅ Staff profile picture updated");
 };
 
 export const registerPatient = async (email, password, patientData) => {

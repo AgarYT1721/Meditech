@@ -4,9 +4,7 @@ import { Calendar, Clock, MapPin, Search, Filter, Check, X, CalendarDays, Loader
 import { getStaffAppointments, updateAppointmentStatus, createAppointment, cancelAppointment } from '../services/appointmentService';
 import { getPatients } from '../services/patientService';
 
-const TEST_USER_UID = "ejCEXQ6aIRcVRcofJXqKxUZTWsZ2";
-
-const StaffAppointmentsView = () => {
+const StaffAppointmentsView = ({ staffUser }) => {
   const [activeTab, setActiveTab] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [appointments, setAppointments] = useState([]);
@@ -20,13 +18,14 @@ const StaffAppointmentsView = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [staffUser]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
+      if (!staffUser?.uid) return;
       const [aptsData, patientsData] = await Promise.all([
-        getStaffAppointments(TEST_USER_UID),
+        getStaffAppointments(staffUser.uid),
         getPatients()
       ]);
       
@@ -67,7 +66,7 @@ const StaffAppointmentsView = () => {
       await createAppointment({
         patientUid: selectedPatient.uid,
         patientName: `${selectedPatient.firstName} ${selectedPatient.lastName}`,
-        staffUid: TEST_USER_UID,
+        staffUid: staffUser.uid,
         reasonId: "CUSTOM",
         reasonDescription: addForm.reasonDescription,
         date: addForm.date,
@@ -218,7 +217,7 @@ const StaffAppointmentsView = () => {
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => setShowAddModal(true)}
-        style={{ position: 'fixed', bottom: '30px', right: '30px', width: '60px', height: '60px', borderRadius: '30px', background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 25px rgba(14, 165, 233, 0.4)', cursor: 'pointer', zIndex: 100 }}
+        style={{ position: 'fixed', bottom: '40px', right: '50px', width: '60px', height: '60px', borderRadius: '30px', background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 25px rgba(14, 165, 233, 0.4)', cursor: 'pointer', zIndex: 100 }}
       >
         <Plus size={28} />
       </motion.button>

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, ChevronRight, FileText, Plus, X, ChevronLeft, Calendar, Activity, Loader2 } from 'lucide-react';
 import { getPatients, getMedicalRecords, addMedicalRecord } from '../services/patientService';
 
-const StaffPatientsView = () => {
+const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
@@ -60,6 +60,18 @@ const StaffPatientsView = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (targetPatientUid && patients.length > 0) {
+      const target = patients.find(p => p.uid === targetPatientUid);
+      if (target) {
+        setSelectedPatient(target);
+        if (startConsultation) {
+          setShowAddEntry(true);
+        }
+      }
+    }
+  }, [targetPatientUid, startConsultation, patients]);
 
   const containerVariants = {
     hidden: { opacity: 0 },

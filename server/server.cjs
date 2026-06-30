@@ -2,6 +2,19 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const nodemailer = require('nodemailer');
+const { initializeApp, cert } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+
+// Initialize Firebase Admin
+try {
+  const serviceAccount = require('./meditech-fd422-firebase-adminsdk-fbsvc-9e8472a079.json');
+  initializeApp({
+    credential: cert(serviceAccount)
+  });
+  console.log("✅ Firebase Admin SDK initialized successfully.");
+} catch (err) {
+  console.error("⚠️ Failed to initialize Firebase Admin SDK. Please ensure the serviceAccountKey is present.", err.message);
+}
 
 const app = express();
 const PORT = 5000;
@@ -65,8 +78,15 @@ app.post('/api/send-otp', async (req, res) => {
       `
     };
 
+    const isMockDomain = email.endsWith('@meditech.com') || email.endsWith('@mock.com');
+
+    if (isMockDomain) {
+      console.log(`⚠️ Mock domain detected. Skipping actual email delivery to ${email} (Code: ${code})`);
+      return res.json({ success: true, message: 'OTP simulated for mock domain' });
+    }
+
     await transporter.sendMail(mailOptions);
-    console.log(`✅ Real OTP sent to ${email}`);
+    console.log(`✅ Real OTP sent to ${email} (Code: ${code})`);
     res.json({ success: true, message: 'OTP sent to email' });
   } catch (error) {
     console.error('❌ Error sending email:', error);
@@ -95,6 +115,44 @@ app.post('/api/verify-otp', (req, res) => {
     return res.json({ success: true, message: 'OTP verified successfully' });
   } else {
     return res.status(400).json({ success: false, message: 'Invalid OTP code' });
+  }
+});
+
+// Admin SDK Endpoint to update user auth credentials
+app.post('/api/admin/update-user', async (req, res) => {
+  const { uid, email, password } = req.body;
+  if (!uid) {
+    return res.status(400).json({ success: false, message: 'UID is required' });
+  }
+
+  try {
+    const updateData = {};
+    if (email) updateData.email = email;
+    if (password) updateData.password = password;
+
+    if (Object.keys(updateData).length > 0) {
+      try {
+        await getAuth().updateUser(uid, updateData);
+        console.log(`✅ Admin SDK updated auth credentials for UID: ${uid}`);
+      } catch (authErr) {
+        if (authErr.code === 'auth/user-not-found') {
+          console.log(`⚠️ User ${uid} not found in Auth. Materializing mock user...`);
+          // A password is required to create an email/password user
+          if (!updateData.password) {
+            updateData.password = "DefaultPass123!"; 
+          }
+          await getAuth().createUser({ uid, ...updateData });
+          console.log(`✅ Admin SDK materialized mock user into real Auth user for UID: ${uid}`);
+        } else {
+          throw authErr;
+        }
+      }
+    }
+
+    res.json({ success: true, message: 'User auth credentials updated securely' });
+  } catch (error) {
+    console.error('❌ Error updating user auth credentials:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 

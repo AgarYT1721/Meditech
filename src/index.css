@@ -360,10 +360,18 @@ body {
   z-index: 2;
 }
 
-.btn-submit:hover {
+.btn-submit:hover:not(:disabled) {
   background: var(--primary);
   box-shadow: 0 20px 40px rgba(0, 102, 255, 0.3), 0 8px 20px var(--primary-dim);
   transform: translateY(-2px);
+}
+
+.btn-submit:disabled {
+  background: var(--surface-2);
+  color: rgba(160, 174, 192, 0.5);
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .btn-secondary {
@@ -387,12 +395,21 @@ body {
   z-index: 2;
 }
 
-.btn-secondary:hover {
+.btn-secondary:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
   background: var(--primary-dim);
   box-shadow: 0 12px 25px rgba(0, 102, 255, 0.15), inset 1px 1px 0 rgba(255, 255, 255, 1);
   transform: translateY(-2px);
+}
+
+.btn-secondary:disabled {
+  background: rgba(255, 255, 255, 0.2);
+  color: rgba(160, 174, 192, 0.6);
+  border-color: rgba(0, 0, 0, 0.05);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 /* Authentication Logic UI Elements */

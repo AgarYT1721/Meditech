@@ -8,7 +8,25 @@ import ClientProfileView from './ClientProfileView';
 import { getPatientProfile } from '../services/patientService';
 import { getPatientAppointments } from '../services/appointmentService';
 import { getPatientRecords } from '../services/recordService';
+import { getDoctors } from '../services/staffService';
 import '../index.css';
+
+const formatTime = (timeStr) => {
+  if (!timeStr) return "";
+  if (timeStr.toLowerCase().includes('am') || timeStr.toLowerCase().includes('pm')) return timeStr;
+  const [h, m] = timeStr.split(':');
+  let hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${m} ${ampm}`;
+};
+
+const getGreeting = (date) => {
+  const hour = date.getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+};
 
 const ClientDashboard = ({ clientUid, onLogout }) => {
   const [activeTab, setActiveTab] = useState('home');
@@ -16,22 +34,39 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
   const [upcomingAppointments, setUpcomingAppointments] = useState([]);
   const [recentRecords, setRecentRecords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  // Mock notifications for demonstration
+  const notifications = [
+    { id: 1, text: "Your checkup results are ready.", time: "10 mins ago", read: false },
+    { id: 2, text: "Appointment reminder: Tomorrow at 10:30 AM", time: "2 hours ago", read: false },
+    { id: 3, text: "Please update your medical history.", time: "1 day ago", read: true }
+  ];
 
   useEffect(() => {
     fetchDashboardData();
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
-      const [profileData, aptsData, recordsData] = await Promise.all([
+      const [profileData, aptsData, recordsData, doctorsData] = await Promise.all([
         getPatientProfile(clientUid),
         getPatientAppointments(clientUid),
         getPatientRecords(clientUid),
+        getDoctors()
       ]);
       setPatient(profileData);
       
-      const upcoming = aptsData.filter(a => a.status === 'pending' || a.status === 'confirmed').slice(0, 2);
+      const enhancedApts = aptsData.map(apt => {
+        const doctor = doctorsData.find(d => d.uid === apt.staffUid || d.id === apt.staffUid);
+        return { ...apt, staffName: doctor ? `${doctor.firstName} ${doctor.lastName}` : apt.staffUid.substring(0,6) };
+      });
+
+      const upcoming = enhancedApts.filter(a => a.status === 'pending' || a.status === 'confirmed').slice(0, 2);
       setUpcomingAppointments(upcoming);
       
       setRecentRecords(recordsData.slice(0, 2));
@@ -88,12 +123,54 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
         </div>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-          <button style={{ background: 'none', border: 'none', position: 'relative', padding: 0 }}>
-            <Bell size={22} color="#666" />
-            <span style={{ position: 'absolute', top: 0, right: 0, width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', border: '2px solid white' }}></span>
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => setShowNotifications(!showNotifications)}
+              style={{ background: 'none', border: 'none', position: 'relative', padding: 0, cursor: 'pointer' }}
+            >
+              <Bell size={22} color="#666" />
+              <span style={{ position: 'absolute', top: 0, right: 0, width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', border: '2px solid white' }}></span>
+            </button>
+            
+            <AnimatePresence>
+              {showNotifications && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  style={{
+                    position: 'absolute',
+                    top: '35px',
+                    right: '-10px',
+                    width: '300px',
+                    background: '#fff',
+                    borderRadius: '16px',
+                    boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+                    border: '1px solid rgba(0,0,0,0.05)',
+                    padding: '15px',
+                    zIndex: 100,
+                    transformOrigin: 'top right'
+                  }}
+                >
+                  <h4 style={{ margin: '0 0 15px 0', fontSize: '1rem', fontWeight: 800, color: '#181818' }}>Notifications</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {notifications.map(notif => (
+                      <div key={notif.id} style={{ display: 'flex', gap: '10px', opacity: notif.read ? 0.6 : 1 }}>
+                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: notif.read ? 'transparent' : '#0066ff', marginTop: '6px', flexShrink: 0 }}></div>
+                        <div>
+                          <div style={{ fontSize: '0.85rem', color: '#181818', fontWeight: notif.read ? 500 : 700 }}>{notif.text}</div>
+                          <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '2px' }}>{notif.time}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           <div 
-            onClick={onLogout}
+            onClick={() => setActiveTab('profile')}
             style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', border: '2px solid #fff', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', cursor: 'pointer' }}
           >
             <img src={patient?.profilePicture || (patient ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${patient.uid}&backgroundColor=b6e3f4` : "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix&backgroundColor=b6e3f4")} alt="Profile" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -119,9 +196,11 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
               </div>
             ) : (
               <>
-                <motion.div variants={itemVariants} style={{ marginBottom: '25px' }}>
-                  <h2 style={{ margin: 0, color: '#666', fontSize: '1rem', fontWeight: 500 }}>Good morning,</h2>
-                  <h1 style={{ margin: '5px 0 0 0', color: '#181818', fontSize: '1.8rem', fontWeight: 800 }}>{patient ? `${patient.firstName} ${patient.lastName}` : 'Guest'}</h1>
+                <motion.div variants={itemVariants} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '25px' }}>
+                  <div>
+                    <h2 style={{ margin: 0, color: '#666', fontSize: '1rem', fontWeight: 500 }}>{getGreeting(currentTime)},</h2>
+                    <h1 style={{ margin: '5px 0 0 0', color: '#181818', fontSize: '1.8rem', fontWeight: 800 }}>{patient ? `${patient.firstName} ${patient.lastName}` : 'Guest'}</h1>
+                  </div>
                 </motion.div>
 
             {/* Quick Actions (Horizontal Scroll) */}
@@ -173,10 +252,10 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
                         <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', marginTop: '3px' }}>{monthName}</div>
                       </div>
                       <div style={{ flex: 1 }}>
-                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#181818' }}>Dr. {apt.staffUid.substring(0,6)}</h4>
+                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#181818' }}>Dr. {apt.staffName}</h4>
                         <div style={{ color: '#888', fontSize: '0.8rem', marginTop: '2px' }}>{apt.reasonDescription}</div>
                         <div style={{ color: '#0066ff', fontSize: '0.75rem', fontWeight: 600, marginTop: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <Clock size={12}/> {apt.time}
+                          <Clock size={12}/> {formatTime(apt.time)}
                         </div>
                       </div>
                       <button onClick={() => setActiveTab('appointments')} style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '10px', width: '35px', height: '35px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#181818' }}>
@@ -258,8 +337,8 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
           <span style={{ fontSize: '0.65rem', fontWeight: activeTab === 'appointments' ? 700 : 500 }}>Schedule</span>
         </button>
         <button onClick={() => setActiveTab('records')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'records' ? '#0066ff' : '#94a3b8' }}>
-          <MessageCircle size={24} strokeWidth={activeTab === 'records' ? 2.5 : 2} />
-          <span style={{ fontSize: '0.65rem', fontWeight: activeTab === 'records' ? 700 : 500 }}>Chats</span>
+          <FileText size={24} strokeWidth={activeTab === 'records' ? 2.5 : 2} />
+          <span style={{ fontSize: '0.65rem', fontWeight: activeTab === 'records' ? 700 : 500 }}>Records</span>
         </button>
         <button onClick={() => setActiveTab('profile')} style={{ background: 'none', border: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: activeTab === 'profile' ? '#0066ff' : '#94a3b8' }}>
           <User size={24} strokeWidth={activeTab === 'profile' ? 2.5 : 2} />

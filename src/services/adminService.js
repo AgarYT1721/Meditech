@@ -116,10 +116,29 @@ export const toggleUserStatus = async (uid, currentStatus) => {
   }
 };
 
-export const updateUserDetails = async (uid, roleLabel, fullName, department) => {
+export const updateUserDetails = async (uid, roleLabel, fullName, department, email, password) => {
   try {
     const [firstName, ...lastNameParts] = fullName.split(" ");
     const lastName = lastNameParts.join(" ");
+
+    // Update Firebase Auth credentials via our secure backend Admin SDK
+    if (email || password) {
+      const response = await fetch('http://localhost:5000/api/admin/update-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ uid, email, password })
+      });
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.message || 'Failed to update auth credentials');
+      }
+    }
+
+    if (email) {
+      await updateDoc(doc(db, "tblusers", uid), {
+        email: email
+      });
+    }
 
     if (roleLabel === "Staff") {
       await updateDoc(doc(db, "tblstaff", uid), {

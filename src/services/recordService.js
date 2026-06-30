@@ -3,17 +3,22 @@ import { db } from "../firebase";
 
 export const getPatientRecords = async (patientUid) => {
   try {
-    const q = query(
-      collection(db, "tblrecords"),
-      where("patientUid", "==", patientUid)
-    );
+    const emrRef = collection(db, "tblpatients", patientUid, "emr_records");
+    const q = query(emrRef, orderBy("createdAt", "desc"));
     const querySnapshot = await getDocs(q);
     const records = [];
     querySnapshot.forEach((doc) => {
-      records.push({ id: doc.id, ...doc.data() });
+      const data = doc.data();
+      records.push({ 
+        id: doc.id, 
+        title: data.diagnosis || "Medical Review",
+        type: "Consultation Notes",
+        status: "Available",
+        date: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : "Unknown",
+        doctorName: "MediTech Provider",
+        ...data 
+      });
     });
-    // Sort by date descending
-    records.sort((a, b) => new Date(b.date) - new Date(a.date));
     return records;
   } catch (error) {
     console.error("Error fetching patient records: ", error);

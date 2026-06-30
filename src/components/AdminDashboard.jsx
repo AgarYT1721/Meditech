@@ -77,7 +77,9 @@ export default function AdminDashboard({ onLogout }) {
       id: u.id,
       role: u.role,
       fullName: u.name,
-      department: u.dept
+      department: u.dept,
+      email: u.email,
+      password: ''
     });
     setShowEditModal(true);
   };
@@ -89,7 +91,7 @@ export default function AdminDashboard({ onLogout }) {
     }
     setEditing(true);
     try {
-      await updateUserDetails(editForm.id, editForm.role, editForm.fullName, editForm.department);
+      await updateUserDetails(editForm.id, editForm.role, editForm.fullName, editForm.department, editForm.email, editForm.password);
       setShowEditModal(false);
       fetchData();
     } catch (error) {
@@ -465,6 +467,15 @@ export default function AdminDashboard({ onLogout }) {
                     <input type="text" className="form-input" placeholder="e.g. Cardiology" value={editForm.department} onChange={e => setEditForm({...editForm, department: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
                   </div>
                 )}
+                <div className="form-group">
+                  <label>CONTACT EMAIL</label>
+                  <input type="email" className="form-input" placeholder="user@gmail.com" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                </div>
+                <div className="form-group">
+                  <label>NEW PASSCODE (OPTIONAL)</label>
+                  <input type="text" className="form-input" placeholder="Leave blank to keep current" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                  <span className="error-text" style={{color: '#64748b'}}>Updating auth credentials natively requires backend Admin SDK.</span>
+                </div>
               </div>
               <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
                 <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowEditModal(false)}>Cancel</button>

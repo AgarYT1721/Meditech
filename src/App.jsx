@@ -23,6 +23,7 @@ function App() {
   const [authStage, setAuthStage] = useState('login'); // 'login', 'otp', 'change-password'
   const [registrationData, setRegistrationData] = useState(null);
   const [clientUid, setClientUid] = useState(null);
+  const [staffUser, setStaffUser] = useState(null);
   
   // Form States
   const [email, setEmail] = useState('');
@@ -43,6 +44,10 @@ function App() {
   const [otpCountdown, setOtpCountdown] = useState(90);
   const [otpAttempts, setOtpAttempts] = useState(0);
 
+  // Loading States
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+
   useEffect(() => {
     setTimeout(() => setIsLoaded(true), 2000);
     seedDatabase();
@@ -57,8 +62,25 @@ function App() {
     return () => clearInterval(timer);
   }, [authStage, otpCountdown]);
 
+  const handleLogout = async (targetState) => {
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.error(err);
+    }
+    setAppState(targetState);
+    setAuthStage('login');
+    setStaffUser(null);
+    setClientUid(null);
+    setEmail('');
+    setPassword('');
+    setOtp('');
+    setOtpAttempts(0);
+    setAuthError('');
+  };
+
   if (appState === 'admin') {
-    return <AdminDashboard onLogout={() => setAppState('auth')} />;
+    return <AdminDashboard onLogout={() => handleLogout('auth')} />;
   }
 
   if (appState.startsWith('client-') && appState !== 'client-dashboard') {
@@ -112,11 +134,19 @@ function App() {
   }
 
   if (appState === 'client-dashboard') {
-    return <ClientDashboard clientUid={clientUid} onLogout={() => { setClientUid(null); setAppState('client-auth'); }} />;
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        <ClientDashboard clientUid={clientUid} onLogout={() => handleLogout('client-auth')} />
+      </motion.div>
+    );
   }
 
   if (appState === 'staff-dashboard') {
-    return <StaffDashboard onLogout={() => setAppState('client-auth')} />;
+    return (
+      <motion.div initial={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }} style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+        <StaffDashboard staffUser={staffUser} setStaffUser={setStaffUser} onLogout={() => handleLogout('auth')} />
+      </motion.div>
+    );
   }
 
   const handleKeyEvent = (e) => {
@@ -144,36 +174,27 @@ function App() {
 
   // --- your existing email validation ---
   const parts = email.split('@');
-  if (parts.length === 2 && parts[1] === 'gmail.com') {
+  if (parts.length === 2 && (parts[1] === 'gmail.com' || parts[1] === 'meditech.com')) {
     const prefix = parts[0];
-    if (prefix.length >= 6 && prefix.length <= 32 &&
-        /[a-z]/.test(prefix) && /[A-Z]/.test(prefix) &&
-        /\d/.test(prefix) && /[_.]/.test(prefix) &&
-        /^[a-zA-Z0-9_.]+$/.test(prefix)) {
+    if (prefix.length >= 5 && prefix.length <= 64 && /^[a-zA-Z0-9_.]+$/.test(prefix)) {
       setEmailError('');
     } else {
-      setEmailError('Prefix must be 6-32 chars, mix of upper/lower/numbers/symbols(_.)');
+      setEmailError('Invalid email prefix format.');
       valid = false;
     }
   } else {
-    setEmailError('Must be a valid @gmail.com address');
+    setEmailError('Must be a valid @gmail.com or @meditech.com address');
     valid = false;
   }
 
-  // --- your existing password validation ---
-  if (password.length >= 15 && password.length <= 20 &&
-      /[a-z]/.test(password) && /[A-Z]/.test(password) &&
-      /\d/.test(password) && /[!@?_\-]/.test(password) &&
-      /^[a-zA-Z0-9!@?_\-]+$/.test(password)) {
-    setPasswordError('');
-  } else {
-    setPasswordError('Must be 15-20 chars, mix of upper/lower/num/symbols(!@?_-), no emojis');
-    valid = false;
-  }
+  // Passwords during login should just be passed to Firebase.
+  // We only require it to not be empty, which is already handled above.
+  setPasswordError('');
 
   if (!valid) return;
 
   // --- NEW: call Firebase after all validation passes ---
+  setIsLoggingIn(true);
   try {
     setAuthError('');
     const user = await loginUser(email, password);
@@ -184,26 +205,49 @@ function App() {
       return;
     }
 
-    // Move to OTP stage on success
-    // (plug in real navigation later when dashboards are ready)
-    setAuthStage('otp');
-    setOtpCountdown(90);
+    setStaffUser(user);
+    if (user.role_id === 4) {
+      setAppState('admin');
+    } else {
+      setAppState('staff-dashboard');
+    }
 
   } catch (err) {
-  console.error("❌ Login error:", err.code, err.message); 
-  setAuthError('Invalid email or password.');
-}
+    console.error("❌ Login error:", err.code, err.message);
+    setAuthError('Invalid email or password.');
+  } finally {
+    setIsLoggingIn(false);
+  }
 };
 
-  const handleOtpSubmit = (e) => {
+  const handleOtpSubmit = async (e) => {
     e.preventDefault();
     if (otpAttempts >= 3) return;
     
-    // Mock OTP verification (any 6 digit for this demo is fine, let's use 123456)
-    if (otp === '123456') { 
-      setAuthStage('change-password');
-    } else {
-      setOtpAttempts(prev => prev + 1);
+    setAuthError('');
+    setIsVerifying(true);
+    try {
+      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate verifying OTP
+      let data = { success: false, message: 'Invalid OTP code. For this demo, use 123456.' };
+      
+      if (otp === '123456') {
+        data = { success: true };
+      }
+      
+      if (data.success) {
+        if (staffUser?.role_id === 4) {
+          setAppState('admin');
+        } else {
+          setAppState('staff-dashboard');
+        }
+      } else {
+        setOtpAttempts(prev => prev + 1);
+        setAuthError(data.message || 'Invalid OTP code');
+      }
+    } catch (err) {
+      setAuthError('Failed to verify OTP: ' + err.message);
+    } finally {
+      setIsVerifying(false);
     }
   };
 
@@ -350,24 +394,17 @@ function App() {
                   </button>
                 </div>
                 {passwordError && !passwordEmpty && <div className="error-text">{passwordError}</div>}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
+                  <button type="button" onClick={() => { setAuthStage('forgot-password'); setAuthError(''); }} style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'monospace', opacity: 0.8 }}>
+                    [FORGOT_PASSCODE?]
+                  </button>
+                </div>
               </div>
 
               {authError && <div className="error-text">{authError}</div>}
 
-              <button type="submit" className="btn-submit">
-                Login
-              </button>
-              
-              <button type="button" className="btn-secondary" style={{marginTop: '0.5rem', background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444'}} onClick={() => setAuthStage('change-password')}>
-                <AlertTriangle size={14} /> [DEV] Simulate First Login
-              </button>
-              
-              <button type="button" className="btn-secondary" style={{marginTop: '0.5rem', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.3)', color: '#10b981'}} onClick={() => setAppState('admin')}>
-                <ShieldCheck size={14} /> [DEV] Jump to Admin Dashboard
-              </button>
-              
-              <button type="button" className="btn-secondary" style={{marginTop: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.3)', color: '#3b82f6'}} onClick={() => setAppState('staff-dashboard')}>
-                <ShieldCheck size={14} /> [DEV] Jump to Staff Dashboard
+              <button type="submit" className="btn-submit" disabled={isLoggingIn}>
+                {isLoggingIn ? 'Authenticating...' : 'Login'}
               </button>
             </form>
           )}
@@ -389,8 +426,8 @@ function App() {
                 {otpAttempts > 0 && <div className="error-text">Failed attempts: {otpAttempts}/3</div>}
               </div>
 
-              <button type="submit" className="btn-submit" disabled={otpAttempts >= 3}>
-                Verify Identity
+              <button type="submit" className="btn-submit" disabled={otpAttempts >= 3 || isVerifying}>
+                {isVerifying ? 'Verifying...' : 'Verify Identity'}
               </button>
 
               <button 
@@ -400,6 +437,49 @@ function App() {
                 onClick={() => { setOtpCountdown(90); setOtpAttempts(0); setOtp(''); }}
               >
                 {otpCountdown > 0 ? `Resend available in ${otpCountdown}s` : 'Resend OTP'}
+              </button>
+            </form>
+          )}
+
+          {authStage === 'forgot-password' && (
+            <form className="auth-form" onSubmit={async (e) => {
+              e.preventDefault();
+              if (email) {
+                setIsLoggingIn(true);
+                try {
+                  await resetPassword(email);
+                  alert('Password reset email sent! Check your inbox.');
+                  setAuthStage('login');
+                  setAuthError('');
+                } catch (err) {
+                  setAuthError('Failed to send reset email: ' + err.message);
+                } finally {
+                  setIsLoggingIn(false);
+                }
+              }
+            }}>
+              <div className="form-group">
+                <label>ID_CREDENTIAL (EMAIL)</label>
+                <div className="input-wrapper">
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    placeholder="Enter your registered email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required 
+                  />
+                </div>
+              </div>
+              
+              {authError && <div className="error-text">{authError}</div>}
+
+              <button type="submit" className="btn-submit" disabled={isLoggingIn}>
+                {isLoggingIn ? 'TRANSMITTING...' : 'SEND RESET LINK'}
+              </button>
+              
+              <button type="button" className="btn-secondary" onClick={() => { setAuthStage('login'); setAuthError(''); }} style={{ marginTop: '15px' }}>
+                ABORT / RETURN
               </button>
             </form>
           )}
