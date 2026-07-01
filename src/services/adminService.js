@@ -1,22 +1,8 @@
-import { collection, getDocs, doc, updateDoc, setDoc, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, updateDoc, setDoc, addDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { initializeApp, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { db, firebaseConfig } from "../firebase";
-
-// Helper: Log Admin Actions
-export const logAdminAction = async (action, targetRecord, executingUser = "Admin Root") => {
-  try {
-    await addDoc(collection(db, "tblauditlogs"), {
-      action,
-      targetRecord,
-      user: executingUser,
-      time: new Date().toISOString(),
-      timestamp: serverTimestamp()
-    });
-  } catch (error) {
-    console.error("Failed to log admin action", error);
-  }
-};
+import { logSystemAction } from "./auditService";
 
 export const getAuditLogs = async () => {
   try {
@@ -107,9 +93,18 @@ export const toggleUserStatus = async (uid, currentStatus) => {
       isActive: newStatus
     });
     
-    // Also update patient/staff collections if necessary, but tblusers holds the master switch for login
+    // Synchronize isActive status to specific role collections
+    const userSnap = await getDoc(doc(db, "tblusers", uid));
+    if (userSnap.exists()) {
+      const u = userSnap.data();
+      if (u.role_id === 2 || u.role_id === 3) {
+        await setDoc(doc(db, "tblstaff", uid), { isActive: newStatus }, { merge: true });
+      } else if (u.role_id === 1) {
+        await setDoc(doc(db, "tblpatients", uid), { isActive: newStatus }, { merge: true });
+      }
+    }
     
-    await logAdminAction(newStatus ? "ACTIVATE_USER" : "DEACTIVATE_USER", uid);
+    await logSystemAction(newStatus ? "ACTIVATE_USER" : "DEACTIVATE_USER", uid);
   } catch (error) {
     console.error("Failed to toggle user status", error);
     throw error;
@@ -123,7 +118,7 @@ export const updateUserDetails = async (uid, roleLabel, fullName, department, em
 
     // Update Firebase Auth credentials via our secure backend Admin SDK
     if (email || password) {
-      const response = await fetch('http://localhost:5000/api/admin/update-user', {
+      const response = await fetch('/api/admin/update-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ uid, email, password })
@@ -135,25 +130,26 @@ export const updateUserDetails = async (uid, roleLabel, fullName, department, em
     }
 
     if (email) {
-      await updateDoc(doc(db, "tblusers", uid), {
+      await setDoc(doc(db, "tblusers", uid), {
         email: email
-      });
+      }, { merge: true });
     }
 
     if (roleLabel === "Staff") {
-      await updateDoc(doc(db, "tblstaff", uid), {
+      await setDoc(doc(db, "tblstaff", uid), {
         firstName: firstName || "",
         lastName: lastName || "",
-        specialization: department || "General"
-      });
+        specialization: department || "General",
+        role: "doctor"
+      }, { merge: true });
     } else if (roleLabel === "Patient") {
-      await updateDoc(doc(db, "tblpatients", uid), {
+      await setDoc(doc(db, "tblpatients", uid), {
         firstName: firstName || "",
         lastName: lastName || ""
-      });
+      }, { merge: true });
     }
 
-    await logAdminAction("UPDATE_USER_DETAILS", uid);
+    await logSystemAction("UPDATE_USER_DETAILS", uid);
   } catch (error) {
     console.error("Failed to update user details", error);
     throw error;
@@ -202,7 +198,7 @@ export const provisionAccount = async (email, password, roleType, fullName, depa
       });
     }
 
-    await logAdminAction("PROVISION_ACCOUNT", user.uid);
+    await logSystemAction("PROVISION_ACCOUNT", user.uid);
 
     return user.uid;
   } catch (error) {

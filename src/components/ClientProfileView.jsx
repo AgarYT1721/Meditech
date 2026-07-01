@@ -17,6 +17,7 @@ const ClientProfileView = ({ patientData, onLogout, onProfileUpdate }) => {
 
   const [notification, setNotification] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     if (notification) {
@@ -160,13 +161,45 @@ const ClientProfileView = ({ patientData, onLogout, onProfileUpdate }) => {
             <ChevronRight size={18} color="#ccc" />
           </button>
           <button 
-            onClick={onLogout}
+            onClick={(e) => {
+              setShowLogoutModal(true);
+            }}
             style={{ width: '100%', padding: '15px', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: '15px', color: '#ef4444', fontWeight: 600 }}
+            onClick={() => setShowLogoutModal(true)}
+            style={{ width: '100%', padding: '15px', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: '15px', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}
           >
             <LogOut size={18} /> Log Out
           </button>
         </div>
       </motion.div>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowLogoutModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#fff', padding: '30px', borderRadius: '20px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', textAlign: 'center' }}
+            >
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '1.2rem', color: '#0f172a' }}>Confirm Logout</h3>
+              <p style={{ margin: '0 0 25px 0', color: '#64748b', fontSize: '0.95rem' }}>Are you sure you want to securely log out of your account?</p>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: '12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '12px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => { setShowLogoutModal(false); onLogout(); }} style={{ flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 600, cursor: 'pointer' }}>Log Out</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </motion.div>
     </>

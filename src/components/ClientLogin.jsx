@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Logo from './Logo';
 import '../index.css';
 import { loginUser, logoutUser } from '../services/authService';
+import { validateEmail, validatePassword } from '../utils/validation';
 
 const ClientLogin = ({ onLoginSuccess, onRegisterSubmit, onNavigateForgot }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -24,10 +25,23 @@ const ClientLogin = ({ onLoginSuccess, onRegisterSubmit, onNavigateForgot }) => 
     phone: '',
     password: ''
   });
+  const [registerError, setRegisterError] = useState('');
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (email && password) {
+      const emailCheck = validateEmail(email);
+      const passwordCheck = validatePassword(password);
+      
+      if (!emailCheck.isValid) {
+        setLoginError(emailCheck.error);
+        return;
+      }
+      if (!passwordCheck.isValid) {
+        setLoginError(passwordCheck.error);
+        return;
+      }
+
       setIsLoading(true);
       setLoginError('');
       try {
@@ -58,7 +72,20 @@ const ClientLogin = ({ onLoginSuccess, onRegisterSubmit, onNavigateForgot }) => 
 
   const handleRegister = (e) => {
     e.preventDefault();
+    setRegisterError('');
     if (formData.firstName && formData.email && formData.password) {
+      const emailCheck = validateEmail(formData.email);
+      if (!emailCheck.isValid) {
+        setRegisterError(emailCheck.error);
+        return;
+      }
+      
+      const passwordCheck = validatePassword(formData.password);
+      if (!passwordCheck.isValid) {
+        setRegisterError(passwordCheck.error);
+        return;
+      }
+
       onRegisterSubmit(formData);
     }
   };
@@ -149,6 +176,11 @@ const ClientLogin = ({ onLoginSuccess, onRegisterSubmit, onNavigateForgot }) => 
               </motion.div>
 
               <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                {registerError && (
+                  <motion.div variants={itemVariants} style={{ background: '#fef2f2', color: '#ef4444', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', textAlign: 'center' }}>
+                    {registerError}
+                  </motion.div>
+                )}
                 <motion.div variants={itemVariants} style={{ display: 'flex', gap: '15px' }}>
                   <div className="mobile-input-group" style={{ position: 'relative', flex: 1 }}>
                     <div style={{ position: 'absolute', top: '50%', transform: 'translateY(-50%)', left: '15px', color: '#888' }}><User size={16} /></div>

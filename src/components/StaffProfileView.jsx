@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { LogOut, ChevronRight, Settings, Shield, Bell, HelpCircle, Mail, Phone, MapPin, Edit2, Check, X, Camera } from 'lucide-react';
-import { updateStaffProfile, updateStaffProfilePicture } from '../services/authService';
+import { updateStaffProfile, updateStaffProfilePicture, resetPassword } from '../services/authService';
 
 const StaffProfileView = ({ staffUser, setStaffUser, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -13,6 +13,19 @@ const StaffProfileView = ({ staffUser, setStaffUser, onLogout }) => {
   const [profilePic, setProfilePic] = useState(staffUser?.profilePicture || null);
   const [isUploadingPic, setIsUploadingPic] = useState(false);
   const fileInputRef = useRef(null);
+
+  const [passwordMessage, setPasswordMessage] = useState({ text: '', type: '' });
+
+  const handlePasswordReset = async () => {
+    if (!staffUser?.email) return;
+    try {
+      await resetPassword(staffUser.email);
+      setPasswordMessage({ text: 'Password reset email sent! Please check your inbox.', type: 'success' });
+    } catch (error) {
+      console.error(error);
+      setPasswordMessage({ text: 'Failed to send password reset email.', type: 'error' });
+    }
+  };
 
   const handleSaveContactInfo = async () => {
     setIsSaving(true);
@@ -90,12 +103,7 @@ const StaffProfileView = ({ staffUser, setStaffUser, onLogout }) => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
 
-  const menuItems = [
-    { icon: <Settings size={20} />, label: 'Account Settings', color: '#6366f1' },
-    { icon: <Shield size={20} />, label: 'Privacy & Security', color: '#10b981' },
-    { icon: <Bell size={20} />, label: 'Notifications', color: '#f59e0b' },
-    { icon: <HelpCircle size={20} />, label: 'Help & Support', color: '#0ea5e9' },
-  ];
+  // Menu items replaced with direct password change
 
   return (
     <motion.div 
@@ -182,19 +190,27 @@ const StaffProfileView = ({ staffUser, setStaffUser, onLogout }) => {
         </div>
       </motion.div>
 
-      {/* Menu Options */}
+      {/* Security Settings (Password Change) */}
       <motion.div variants={itemVariants} style={{ background: '#fff', borderRadius: '20px', padding: '10px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', marginBottom: '30px' }}>
-        {menuItems.map((item, idx) => (
-          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', borderBottom: idx !== menuItems.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none', cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <div style={{ background: `${item.color}15`, color: item.color, padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {item.icon}
-              </div>
-              <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#181818' }}>{item.label}</span>
-            </div>
-            <ChevronRight size={20} color="#adb5bd" />
+        
+        {passwordMessage.text && (
+          <div style={{ margin: '15px 15px 0 15px', padding: '12px', borderRadius: '12px', fontSize: '0.85rem', fontWeight: 600, background: passwordMessage.type === 'error' ? '#fef2f2' : '#ecfdf5', color: passwordMessage.type === 'error' ? '#ef4444' : '#10b981', border: `1px solid ${passwordMessage.type === 'error' ? '#fecaca' : '#a7f3d0'}` }}>
+            {passwordMessage.text}
           </div>
-        ))}
+        )}
+
+        <button 
+          onClick={handlePasswordReset}
+          style={{ width: '100%', padding: '15px', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#181818', fontWeight: 600, cursor: 'pointer' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+            <div style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', padding: '10px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Shield size={20} />
+            </div>
+            <span style={{ fontSize: '0.95rem', fontWeight: 600, color: '#181818' }}>Change Password (Email Link)</span>
+          </div>
+          <ChevronRight size={20} color="#adb5bd" />
+        </button>
       </motion.div>
 
       {/* Redundant logout button removed per user request */}

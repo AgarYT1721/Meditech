@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Activity, Calendar, FileText, Search, Plus, Filter, Edit2, ShieldAlert, RotateCcw, Power, ShieldCheck, ChevronRight, LogOut, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getAllSystemUsers, toggleUserStatus, provisionAccount, getAuditLogs, updateUserDetails } from '../services/adminService';
+import { validateEmail, validatePassword } from '../utils/validation';
 import '../index.css';
 
 export default function AdminDashboard({ onLogout }) {
@@ -22,6 +23,9 @@ export default function AdminDashboard({ onLogout }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({ id: '', role: '', fullName: '', department: '' });
   const [editing, setEditing] = useState(false);
+  
+  const [modalError, setModalError] = useState('');
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -44,6 +48,11 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const handleToggleStatus = async (uid, isCurrentlyActive) => {
+    const action = isCurrentlyActive ? 'deactivate' : 'reactivate';
+    if (!window.confirm(`Are you sure you want to ${action} this account?`)) {
+      return;
+    }
+    
     try {
       await toggleUserStatus(uid, isCurrentlyActive);
       fetchData(); // Refresh table
@@ -54,10 +63,24 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const handleProvisionSubmit = async () => {
+    setModalError('');
     if (!addForm.fullName || !addForm.email || !addForm.password) {
-      alert("Please fill out all fields.");
+      setModalError("Please fill out all required fields.");
       return;
     }
+    
+    const emailCheck = validateEmail(addForm.email);
+    if (!emailCheck.isValid) {
+      setModalError(emailCheck.error);
+      return;
+    }
+
+    const passwordCheck = validatePassword(addForm.password);
+    if (!passwordCheck.isValid) {
+      setModalError(passwordCheck.error);
+      return;
+    }
+
     setAdding(true);
     try {
       await provisionAccount(addForm.email, addForm.password, addForm.role, addForm.fullName, addForm.department);
@@ -85,10 +108,28 @@ export default function AdminDashboard({ onLogout }) {
   };
 
   const handleEditSubmit = async () => {
+    setModalError('');
     if (!editForm.fullName) {
-      alert("Full name cannot be empty.");
+      setModalError("Full name cannot be empty.");
       return;
     }
+
+    if (editForm.email) {
+      const emailCheck = validateEmail(editForm.email);
+      if (!emailCheck.isValid) {
+        setModalError(emailCheck.error);
+        return;
+      }
+    }
+
+    if (editForm.password) {
+      const passwordCheck = validatePassword(editForm.password);
+      if (!passwordCheck.isValid) {
+        setModalError(passwordCheck.error);
+        return;
+      }
+    }
+
     setEditing(true);
     try {
       await updateUserDetails(editForm.id, editForm.role, editForm.fullName, editForm.department, editForm.email, editForm.password);
@@ -192,7 +233,7 @@ export default function AdminDashboard({ onLogout }) {
             <div className="name">Admin Root</div>
             <div className="role">CLEARANCE: OMEGA-7</div>
           </div>
-          <button className="btn-icon" onClick={onLogout} title="Logout">
+          <button className="btn-icon" onClick={() => setShowLogoutModal(true)} title="Logout">
             <LogOut size={14} />
           </button>
         </div>
@@ -372,7 +413,7 @@ export default function AdminDashboard({ onLogout }) {
         {showAddModal && (
           <motion.div 
             className="modal-overlay" 
-            onClick={() => setShowAddModal(false)}
+            onClick={() => { setShowAddModal(false); setModalError(''); }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -392,12 +433,19 @@ export default function AdminDashboard({ onLogout }) {
               </div>
               <div className="modal-body auth-form" style={{animation: 'none', gap: '1.5rem', flex: 1, overflowY: 'auto'}}>
                 <div className="form-group">
-                  <label>SYSTEM ROLE</label>
+                  <label>ROLE</label>
                   <select className="form-input" value={addForm.role} onChange={e => setAddForm({...addForm, role: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}}>
-                    <option value="Patient">Patient</option>
-                    <option value="Staff">Staff</option>
+                    <option value="Staff">Staff (Doctor/Nurse)</option>
+                    <option value="Admin">Administrator</option>
                   </select>
                 </div>
+                
+                {modalError && (
+                  <div style={{ background: '#fef2f2', color: '#ef4444', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '10px' }}>
+                    {modalError}
+                  </div>
+                )}
+                
                 <div className="form-group">
                   <label>FULL NAME</label>
                   <input type="text" className="form-input" placeholder="e.g. Jane Doe" value={addForm.fullName} onChange={e => setAddForm({...addForm, fullName: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
@@ -415,11 +463,11 @@ export default function AdminDashboard({ onLogout }) {
                 <div className="form-group">
                   <label>DEFAULT PASSCODE</label>
                   <input type="text" className="form-input" placeholder="e.g. Password123!" value={addForm.password} onChange={e => setAddForm({...addForm, password: e.target.value})} style={{background: '#f8fafc', borderColor: '#e2e8f0', color: '#0f172a'}} />
-                  <span className="error-text" style={{color: '#64748b'}}>Minimum 6 characters required by Auth system.</span>
+                  <span className="error-text" style={{color: '#64748b'}}>Must be 15-20 characters, include uppercase, lowercase, numbers, and symbols (!@?_-).</span>
                 </div>
               </div>
               <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
-                <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => { setShowAddModal(false); setModalError(''); }}>Cancel</button>
                 <button className="btn-submit" disabled={adding} style={{flex: 2, marginTop: 0, background: '#0f172a', opacity: adding ? 0.7 : 1, cursor: adding ? 'not-allowed' : 'pointer'}} onClick={handleProvisionSubmit}>
                   {adding ? 'Initializing...' : 'Initialize Account'}
                 </button>
@@ -434,7 +482,7 @@ export default function AdminDashboard({ onLogout }) {
         {showEditModal && (
           <motion.div 
             className="modal-overlay" 
-            onClick={() => setShowEditModal(false)}
+            onClick={() => { setShowEditModal(false); setModalError(''); }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -457,6 +505,13 @@ export default function AdminDashboard({ onLogout }) {
                   <label>SYSTEM ROLE (LOCKED)</label>
                   <input type="text" className="form-input" value={editForm.role} disabled style={{background: '#f1f5f9', borderColor: '#e2e8f0', color: '#64748b'}} />
                 </div>
+                
+                {modalError && (
+                  <div style={{ background: '#fef2f2', color: '#ef4444', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', marginBottom: '10px' }}>
+                    {modalError}
+                  </div>
+                )}
+                
                 <div className="form-group">
                   <label>FULL NAME</label>
                   <input type="text" className="form-input" placeholder="e.g. Jane Doe" value={editForm.fullName} onChange={e => setEditForm({...editForm, fullName: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
@@ -472,16 +527,44 @@ export default function AdminDashboard({ onLogout }) {
                   <input type="email" className="form-input" placeholder="user@gmail.com" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
                 </div>
                 <div className="form-group">
-                  <label>NEW PASSCODE (OPTIONAL)</label>
-                  <input type="text" className="form-input" placeholder="Leave blank to keep current" value={editForm.password} onChange={e => setEditForm({...editForm, password: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
-                  <span className="error-text" style={{color: '#64748b'}}>Updating auth credentials natively requires backend Admin SDK.</span>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', letterSpacing: '0.5px' }}>RESET PASSCODE</label>
+                  <input type="text" className="form-input" placeholder="Leave blank to keep current" value={editForm.password || ''} onChange={e => setEditForm({...editForm, password: e.target.value})} style={{background: '#ffffff', borderColor: '#e2e8f0', color: '#0f172a'}} />
+                  <span className="error-text" style={{color: '#64748b', marginTop: '6px', display: 'block'}}>Must be 15-20 characters, include uppercase, lowercase, numbers, and symbols (!@?_-).</span>
                 </div>
               </div>
-              <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#ffffff'}}>
-                <button className="btn-secondary" style={{flex: 1, background: '#f8fafc', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => setShowEditModal(false)}>Cancel</button>
-                <button className="btn-submit" disabled={editing} style={{flex: 2, marginTop: 0, background: '#0f172a', opacity: editing ? 0.7 : 1, cursor: editing ? 'not-allowed' : 'pointer'}} onClick={handleEditSubmit}>
+              <div className="modal-footer" style={{display: 'flex', gap: '1rem', padding: '1.5rem 2rem', borderTop: '1px solid #e2e8f0', background: '#f8fafc'}}>
+                <button className="btn-secondary" style={{flex: 1, background: '#ffffff', color: '#64748b', border: '1px solid #e2e8f0'}} onClick={() => { setShowEditModal(false); setModalError(''); }}>Cancel</button>
+                <button className="btn-submit" disabled={editing} style={{flex: 2, marginTop: 0, background: '#0ea5e9', opacity: editing ? 0.7 : 1, cursor: editing ? 'not-allowed' : 'pointer', border: 'none'}} onClick={handleEditSubmit}>
                   {editing ? 'Updating...' : 'Save Changes'}
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Logout Confirmation Modal */}
+      <AnimatePresence>
+        {showLogoutModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            onClick={() => setShowLogoutModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#fff', padding: '30px', borderRadius: '20px', width: '90%', maxWidth: '400px', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', textAlign: 'center' }}
+            >
+              <h3 style={{ margin: '0 0 15px 0', fontSize: '1.2rem', color: '#0f172a' }}>Confirm Logout</h3>
+              <p style={{ margin: '0 0 25px 0', color: '#64748b', fontSize: '0.95rem' }}>Are you sure you want to securely log out of your account?</p>
+              <div style={{ display: 'flex', gap: '15px' }}>
+                <button onClick={() => setShowLogoutModal(false)} style={{ flex: 1, padding: '12px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '12px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => { setShowLogoutModal(false); onLogout(); }} style={{ flex: 1, padding: '12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 600, cursor: 'pointer' }}>Log Out</button>
               </div>
             </motion.div>
           </motion.div>

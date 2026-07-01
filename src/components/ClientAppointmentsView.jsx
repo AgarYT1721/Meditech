@@ -24,6 +24,7 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const [selectedTime, setSelectedTime] = useState('04:45 PM');
+  const [reasonDescription, setReasonDescription] = useState('General Checkup');
   const [rescheduleAptId, setRescheduleAptId] = useState(null);
 
   const dates = React.useMemo(() => {
@@ -94,14 +95,14 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
     try {
       const dateStr = selectedDate;
       if (rescheduleAptId) {
-        await updateAppointmentDate(rescheduleAptId, dateStr, selectedTime);
+        await updateAppointmentDate(rescheduleAptId, dateStr, selectedTime, reasonDescription);
       } else {
         const aptData = {
           patientUid: clientUid,
           patientName: patientData ? `${patientData.firstName} ${patientData.lastName}` : "Unknown Patient",
           staffUid: selectedDoctor.uid || selectedDoctor.id,
           reasonId: "R01",
-          reasonDescription: "General Checkup",
+          reasonDescription: reasonDescription || "General Checkup",
           date: dateStr,
           time: selectedTime,
           status: "pending"
@@ -421,6 +422,18 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Reason Input */}
+            <div style={{ background: '#fff', borderRadius: '24px', padding: '25px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)', marginBottom: '30px' }}>
+              <h4 style={{ margin: 0, marginBottom: '15px', fontSize: '1rem', fontWeight: 800, color: '#181818' }}>Reason for Visit</h4>
+              <input 
+                type="text" 
+                value={reasonDescription}
+                onChange={(e) => setReasonDescription(e.target.value)}
+                placeholder="e.g. Annual Checkup, Headache..."
+                style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', color: '#181818', boxSizing: 'border-box' }}
+              />
             </div>
 
             {/* Book Button */}

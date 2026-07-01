@@ -1,5 +1,6 @@
 import { collection, getDocs, getDoc, doc, query, orderBy, updateDoc, addDoc } from "firebase/firestore";
-import { db } from "../firebase";
+import { db, auth } from "../firebase";
+import { logSystemAction } from "./auditService";
 
 export const getPatients = async () => {
   try {
@@ -75,6 +76,8 @@ export const uploadProfilePicture = async (file, patientUid) => {
             await updateDoc(patientRef, {
               profilePicture: base64String
             });
+            const userUid = auth.currentUser ? auth.currentUser.uid : "System";
+            await logSystemAction("UPDATE_PATIENT_PROFILE_PICTURE", patientUid, userUid);
             resolve(base64String);
           } catch (dbError) {
             console.error("Firestore update failed:", dbError);
@@ -100,6 +103,10 @@ export const addMedicalRecord = async (patientUid, recordData) => {
       ...recordData,
       createdAt: new Date().toISOString()
     });
+    
+    const userUid = auth.currentUser ? auth.currentUser.uid : "System";
+    await logSystemAction("ADD_MEDICAL_RECORD", patientUid, userUid, { recordId: docRef.id, type: recordData.type || "EMR" });
+    
     return docRef.id;
   } catch (error) {
     console.error("Error adding medical record:", error);
@@ -119,6 +126,22 @@ export const getMedicalRecords = async (patientUid) => {
     return records;
   } catch (error) {
     console.error("Error fetching medical records:", error);
+    throw error;
+  }
+};
+
+export const updatePatientConditions = async (patientUid, allergies, existingConditions) => {
+  try {
+    const patientRef = doc(db, "tblpatients", patientUid);
+    await updateDoc(patientRef, {
+      allergies: allergies || "",
+      existingConditions: existingConditions || ""
+    });
+    
+    const userUid = auth.currentUser ? auth.currentUser.uid : "System";
+    await logSystemAction("UPDATE_PATIENT_CONDITIONS", patientUid, userUid, { allergies, existingConditions });
+  } catch (error) {
+    console.error("Error updating patient conditions:", error);
     throw error;
   }
 };

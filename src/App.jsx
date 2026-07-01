@@ -9,8 +9,10 @@ import ClientLogin from './components/ClientLogin';
 import ClientOtpVerification from './components/ClientOtpVerification';
 import ClientForgotPassword from './components/ClientForgotPassword';
 import './index.css';
-import { loginUser, registerPatient, logoutUser } from "./services/authService"; // addition
-import { seedDatabase } from "./seed";
+import { loginUser, fetchUserDetails, registerPatient, logoutUser, resetPassword } from "./services/authService";
+import { auth } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { validateEmail, validatePassword } from "./utils/validation";
 
 function App() {
   const [isLoaded, setIsLoaded] = useState(false);
@@ -41,16 +43,60 @@ function App() {
   
   // OTP States
   const [otp, setOtp] = useState('');
-  const [otpCountdown, setOtpCountdown] = useState(90);
+  const [otpCountdown, setOtpCountdown] = useState(0);
   const [otpAttempts, setOtpAttempts] = useState(0);
+  const [otpRequests, setOtpRequests] = useState(1);
 
   // Loading States
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
   useEffect(() => {
-    setTimeout(() => setIsLoaded(true), 2000);
-    seedDatabase();
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const data = await fetchUserDetails(user);
+          if (data.role_id === 1) {
+            setClientUid(data.uid);
+            setAppState('client-dashboard');
+          } else if (data.role_id === 4) {
+            if (sessionStorage.getItem('otpVerified') === 'true') {
+              setAppState('admin');
+            } else {
+              setStaffUser(data);
+              setAppState('auth');
+              setAuthStage('otp');
+              setOtpCountdown(90);
+              setOtpAttempts(0);
+              setOtpRequests(1);
+              setOtp('');
+            }
+          } else {
+            if (sessionStorage.getItem('otpVerified') === 'true') {
+              setStaffUser(data);
+              setAppState('staff-dashboard');
+            } else {
+              setStaffUser(data);
+              setAppState('auth');
+              setAuthStage('otp');
+              setOtpCountdown(90);
+              setOtpAttempts(0);
+              setOtpRequests(1);
+              setOtp('');
+            }
+          }
+        } catch (error) {
+          console.error("Session restore failed:", error);
+          setAppState(window.innerWidth <= 768 ? 'client-auth' : 'auth');
+        }
+      } else {
+        setAppState(window.innerWidth <= 768 ? 'client-auth' : 'auth');
+      }
+      setTimeout(() => setIsLoaded(true), 1500);
+      setTimeout(() => setShowSplash(false), 2000);
+    });
+
+    return () => unsubscribe();
   }, []);
   
   // Countdown timer for OTP
@@ -68,6 +114,7 @@ function App() {
     } catch (err) {
       console.error(err);
     }
+    sessionStorage.removeItem('otpVerified');
     setAppState(targetState);
     setAuthStage('login');
     setStaffUser(null);
@@ -76,6 +123,7 @@ function App() {
     setPassword('');
     setOtp('');
     setOtpAttempts(0);
+    setOtpRequests(1);
     setAuthError('');
   };
 
@@ -172,24 +220,22 @@ function App() {
   }
   if (!valid) return;
 
-  // --- your existing email validation ---
-  const parts = email.split('@');
-  if (parts.length === 2 && (parts[1] === 'gmail.com' || parts[1] === 'meditech.com')) {
-    const prefix = parts[0];
-    if (prefix.length >= 5 && prefix.length <= 64 && /^[a-zA-Z0-9_.]+$/.test(prefix)) {
-      setEmailError('');
-    } else {
-      setEmailError('Invalid email prefix format.');
-      valid = false;
-    }
-  } else {
-    setEmailError('Must be a valid @gmail.com or @meditech.com address');
+  // --- Strict BRD Validation ---
+  const emailCheck = validateEmail(email);
+  if (!emailCheck.isValid) {
+    setEmailError(emailCheck.error);
     valid = false;
+  } else {
+    setEmailError('');
   }
 
-  // Passwords during login should just be passed to Firebase.
-  // We only require it to not be empty, which is already handled above.
-  setPasswordError('');
+  const passwordCheck = validatePassword(password);
+  if (!passwordCheck.isValid) {
+    setPasswordError(passwordCheck.error);
+    valid = false;
+  } else {
+    setPasswordError('');
+  }
 
   if (!valid) return;
 
@@ -204,13 +250,8 @@ function App() {
       setAuthError('Patient accounts cannot access the Staff Portal.');
       return;
     }
-
-    setStaffUser(user);
-    if (user.role_id === 4) {
-      setAppState('admin');
-    } else {
-      setAppState('staff-dashboard');
-    }
+    
+    // onAuthStateChanged will handle the rest (routing to OTP)
 
   } catch (err) {
     console.error("❌ Login error:", err.code, err.message);
@@ -223,6 +264,10 @@ function App() {
   const handleOtpSubmit = async (e) => {
     e.preventDefault();
     if (otpAttempts >= 3) return;
+    if (otpCountdown === 0) {
+      setAuthError('OTP expired. Please resend a new code.');
+      return;
+    }
     
     setAuthError('');
     setIsVerifying(true);
@@ -235,6 +280,7 @@ function App() {
       }
       
       if (data.success) {
+        sessionStorage.setItem('otpVerified', 'true');
         if (staffUser?.role_id === 4) {
           setAppState('admin');
         } else {
@@ -413,6 +459,9 @@ function App() {
             <form className="auth-form" onSubmit={handleOtpSubmit}>
               <div className="form-group">
                 <label>ONE_TIME_PASSCODE (OTP)</label>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                  For this demo, please use code: <strong>123456</strong>
+                </p>
                 <input 
                   type="text" 
                   className="form-input" 
@@ -426,17 +475,19 @@ function App() {
                 {otpAttempts > 0 && <div className="error-text">Failed attempts: {otpAttempts}/3</div>}
               </div>
 
-              <button type="submit" className="btn-submit" disabled={otpAttempts >= 3 || isVerifying}>
+              {authError && <div className="error-text">{authError}</div>}
+
+              <button type="submit" className="btn-submit" disabled={otpAttempts >= 3 || isVerifying || otpCountdown === 0}>
                 {isVerifying ? 'Verifying...' : 'Verify Identity'}
               </button>
 
               <button 
                 type="button" 
                 className="btn-secondary" 
-                disabled={otpCountdown > 0}
-                onClick={() => { setOtpCountdown(90); setOtpAttempts(0); setOtp(''); }}
+                disabled={otpCountdown > 0 || otpRequests >= 5}
+                onClick={() => { setOtpCountdown(90); setOtpAttempts(0); setOtp(''); setOtpRequests(prev => prev + 1); }}
               >
-                {otpCountdown > 0 ? `Resend available in ${otpCountdown}s` : 'Resend OTP'}
+                {otpRequests >= 5 ? 'Maximum requests reached' : (otpCountdown > 0 ? `Resend available in ${otpCountdown}s` : `Resend OTP (${5 - otpRequests} left)`)}
               </button>
             </form>
           )}

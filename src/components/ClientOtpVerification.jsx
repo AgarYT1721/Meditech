@@ -6,14 +6,16 @@ import Logo from './Logo';
 const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
   const [otp, setOtp] = useState('');
   const [countdown, setCountdown] = useState(90);
+  const [attempts, setAttempts] = useState(0);
+  const [requests, setRequests] = useState(1);
   const [status, setStatus] = useState('idle'); // 'idle', 'error', 'success', 'cascading-out'
   const inputRef = useRef(null);
 
   useEffect(() => {
-    if (status === 'idle' && inputRef.current) {
+    if (status === 'idle' && inputRef.current && attempts < 3 && countdown > 0) {
       inputRef.current.focus();
     }
-  }, [status]);
+  }, [status, attempts, countdown]);
 
   useEffect(() => {
     let timer;
@@ -25,6 +27,9 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (attempts >= 3) return;
+    if (countdown === 0) return;
+    
     if (otp.length === 6) {
       try {
         const response = await fetch('/api/verify-otp', {
@@ -40,6 +45,7 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
             onOtpSuccess();
           }, 1500);
         } else {
+          setAttempts(prev => prev + 1);
           setStatus('error');
           setTimeout(() => {
             setStatus('cascading-out'); 
@@ -51,6 +57,7 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
         }
       } catch (err) {
         console.error("OTP Verification Error:", err);
+        setAttempts(prev => prev + 1);
         setStatus('error');
         setTimeout(() => {
           setStatus('cascading-out');
@@ -202,9 +209,11 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
           </motion.div>
 
           <motion.div variants={itemVariants}>
+            {attempts > 0 && <div style={{ color: '#ef4444', fontSize: '0.8rem', textAlign: 'center', marginTop: '10px' }}>Failed attempts: {attempts}/3</div>}
+            
             <motion.button 
               type="submit" 
-              disabled={otp.length !== 6 || status !== 'idle'}
+              disabled={otp.length !== 6 || status !== 'idle' || attempts >= 3 || countdown === 0}
               animate={
                 status === 'error' ? { x: [-10, 10, -10, 10, 0] } : {}
               }
@@ -216,20 +225,20 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
                   ? '#ef4444' 
                   : status === 'success' 
                     ? '#10b981' 
-                    : otp.length !== 6
+                    : (otp.length !== 6 || attempts >= 3 || countdown === 0)
                       ? '#cbd5e1'
                       : 'linear-gradient(90deg, #0066ff, #00bfff)',
-                color: otp.length !== 6 ? '#94a3b8' : 'white',
+                color: (otp.length !== 6 || attempts >= 3 || countdown === 0) ? '#94a3b8' : 'white',
                 border: 'none',
                 borderRadius: '12px',
                 fontSize: '1.1rem',
                 fontWeight: 'bold',
-                cursor: otp.length === 6 && status === 'idle' ? 'pointer' : 'not-allowed',
+                cursor: (otp.length === 6 && status === 'idle' && attempts < 3 && countdown > 0) ? 'pointer' : 'not-allowed',
                 boxShadow: (status === 'error' || status === 'cascading-out')
                   ? '0 8px 15px rgba(239, 68, 68, 0.3)' 
                   : status === 'success'
                     ? '0 8px 15px rgba(16, 185, 129, 0.3)'
-                    : otp.length !== 6
+                    : (otp.length !== 6 || attempts >= 3 || countdown === 0)
                       ? 'none'
                       : '0 8px 15px rgba(0, 102, 255, 0.2)',
                 marginTop: '10px',
@@ -242,10 +251,14 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
         </form>
 
         <motion.div variants={itemVariants} style={{ marginTop: '30px', textAlign: 'center', fontSize: '0.9rem', color: '#666' }}>
-          {countdown > 0 ? (
+          {requests >= 5 ? (
+            <span style={{ color: '#ef4444', fontWeight: 'bold' }}>Maximum requests reached.</span>
+          ) : countdown > 0 ? (
             <span>Resend code in <span style={{ fontWeight: 'bold' }}>{countdown}s</span></span>
           ) : (
-            <span onClick={() => setCountdown(90)} style={{ color: '#0066ff', fontWeight: 600, cursor: 'pointer' }}>Resend Verification Code</span>
+            <span onClick={() => { setCountdown(90); setAttempts(0); setOtp(''); setStatus('idle'); setRequests(prev => prev + 1); }} style={{ color: '#0066ff', fontWeight: 600, cursor: 'pointer' }}>
+              Resend Verification Code ({5 - requests} left)
+            </span>
           )}
         </motion.div>
         </motion.div>

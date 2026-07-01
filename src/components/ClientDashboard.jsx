@@ -9,7 +9,20 @@ import { getPatientProfile } from '../services/patientService';
 import { getPatientAppointments } from '../services/appointmentService';
 import { getPatientRecords } from '../services/recordService';
 import { getDoctors } from '../services/staffService';
+import { markNotificationAsRead, subscribeToNotifications } from '../services/notificationService';
 import '../index.css';
+
+const getRelativeTime = (isoString) => {
+  if (!isoString) return '';
+  const diffInSeconds = Math.floor((new Date() - new Date(isoString)) / 1000);
+  if (diffInSeconds < 60) return `Just now`;
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes} min${diffInMinutes > 1 ? 's' : ''} ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hr${diffInHours > 1 ? 's' : ''} ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+};
 
 const formatTime = (timeStr) => {
   if (!timeStr) return "";
@@ -37,18 +50,34 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Mock notifications for demonstration
-  const notifications = [
-    { id: 1, text: "Your checkup results are ready.", time: "10 mins ago", read: false },
-    { id: 2, text: "Appointment reminder: Tomorrow at 10:30 AM", time: "2 hours ago", read: false },
-    { id: 3, text: "Please update your medical history.", time: "1 day ago", read: true }
-  ];
+  const [notifications, setNotifications] = useState([]);
+
+  const handleMarkAsRead = async (id, currentRead, docId) => {
+    if (currentRead) return;
+    try {
+      await markNotificationAsRead(id, docId);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  // Close notification panel when tab changes
+  useEffect(() => {
+    setShowNotifications(false);
+  }, [activeTab]);
 
   useEffect(() => {
     fetchDashboardData();
+    const unsubscribe = subscribeToNotifications(clientUid, (notifs) => {
+      setNotifications(notifs);
+    });
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
+  }, [clientUid]);
 
   const fetchDashboardData = async () => {
     setLoading(true);
@@ -92,10 +121,11 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
 
   return (
     <div className="mobile-dash-wrapper" style={{
-      minHeight: '100vh',
+      height: '100vh',
       width: '100%',
       flex: 1,
       overflowX: 'hidden',
+      overflowY: 'auto',
       background: '#f8fafc',
       fontFamily: "'Inter', sans-serif",
       position: 'relative',
@@ -129,7 +159,9 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
               style={{ background: 'none', border: 'none', position: 'relative', padding: 0, cursor: 'pointer' }}
             >
               <Bell size={22} color="#666" />
-              <span style={{ position: 'absolute', top: 0, right: 0, width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', border: '2px solid white' }}></span>
+              {notifications.some(n => !n.read) && (
+                <span style={{ position: 'absolute', top: 0, right: 0, width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', border: '2px solid white' }}></span>
+              )}
             </button>
             
             <AnimatePresence>
@@ -154,15 +186,19 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
                 >
                   <h4 style={{ margin: '0 0 15px 0', fontSize: '1rem', fontWeight: 800, color: '#181818' }}>Notifications</h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    {notifications.map(notif => (
-                      <div key={notif.id} style={{ display: 'flex', gap: '10px', opacity: notif.read ? 0.6 : 1 }}>
-                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: notif.read ? 'transparent' : '#0066ff', marginTop: '6px', flexShrink: 0 }}></div>
-                        <div>
-                          <div style={{ fontSize: '0.85rem', color: '#181818', fontWeight: notif.read ? 500 : 700 }}>{notif.text}</div>
-                          <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '2px' }}>{notif.time}</div>
+                    {notifications.length === 0 ? (
+                      <div style={{ color: '#888', fontSize: '0.85rem', textAlign: 'center', padding: '10px' }}>No notifications.</div>
+                    ) : (
+                      notifications.map(notif => (
+                        <div key={notif.id} onClick={() => handleMarkAsRead(notif.id, notif.read, notif.docId)} style={{ display: 'flex', gap: '10px', opacity: notif.read ? 0.6 : 1, cursor: notif.read ? 'default' : 'pointer' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: notif.read ? 'transparent' : '#0066ff', marginTop: '6px', flexShrink: 0 }}></div>
+                          <div>
+                            <div style={{ fontSize: '0.85rem', color: '#181818', fontWeight: notif.read ? 500 : 700 }}>{notif.text}</div>
+                            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '2px' }}>{getRelativeTime(notif.createdAt)}</div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </motion.div>
               )}

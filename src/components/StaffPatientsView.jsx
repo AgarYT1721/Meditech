@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, ChevronRight, FileText, Plus, X, ChevronLeft, Calendar, Activity, Loader2 } from 'lucide-react';
-import { getPatients, getMedicalRecords, addMedicalRecord } from '../services/patientService';
+import { Search, ChevronRight, FileText, Plus, X, ChevronLeft, Calendar, Activity, Loader2, Edit, Check, AlertCircle, Clock } from 'lucide-react';
+import { getPatients, getMedicalRecords, addMedicalRecord, updatePatientConditions } from '../services/patientService';
+import { getPatientAppointments } from '../services/appointmentService';
+import { getDoctors } from '../services/staffService';
 
 const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,11 +16,64 @@ const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
   const [loadingEmr, setLoadingEmr] = useState(false);
   const [emrForm, setEmrForm] = useState({ diagnosis: '', notes: '', prescription: '' });
 
+  const [visitHistory, setVisitHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  
+  const [isEditingConditions, setIsEditingConditions] = useState(false);
+  const [conditionsForm, setConditionsForm] = useState({ allergies: '', existingConditions: '' });
+
   useEffect(() => {
     if (selectedPatient) {
       fetchEMRs();
+      fetchHistory();
+      setConditionsForm({
+        allergies: selectedPatient.allergies || '',
+        existingConditions: selectedPatient.existingConditions || ''
+      });
     }
   }, [selectedPatient]);
+
+  const fetchHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const [apts, docs] = await Promise.all([
+        getPatientAppointments(selectedPatient.uid),
+        getDoctors()
+      ]);
+      const enhancedApts = apts.map(apt => {
+        const doctor = docs.find(d => d.uid === apt.staffUid || d.id === apt.staffUid);
+        return { 
+          ...apt, 
+          staffName: doctor ? `${doctor.firstName} ${doctor.lastName}` : apt.staffUid.substring(0,6) 
+        };
+      });
+      setVisitHistory(enhancedApts);
+    } catch (error) {
+      console.error("Failed to fetch visit history", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleSaveConditions = async () => {
+    try {
+      await updatePatientConditions(selectedPatient.uid, conditionsForm.allergies, conditionsForm.existingConditions);
+      // Update local state
+      setSelectedPatient(prev => ({ ...prev, allergies: conditionsForm.allergies, existingConditions: conditionsForm.existingConditions }));
+      
+      // Also update the patient in the list so if they close and reopen it's still there
+      setPatients(prevList => prevList.map(p => 
+        p.uid === selectedPatient.uid 
+          ? { ...p, allergies: conditionsForm.allergies, existingConditions: conditionsForm.existingConditions }
+          : p
+      ));
+      
+      setIsEditingConditions(false);
+    } catch (error) {
+      console.error("Failed to save conditions", error);
+      alert("Failed to save conditions");
+    }
+  };
 
   const fetchEMRs = async () => {
     setLoadingEmr(true);
@@ -182,6 +237,77 @@ const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
               </div>
             </div>
 
+            {/* Allergies & Existing Conditions */}
+            <div style={{ background: '#fff', borderRadius: '20px', padding: '20px', marginBottom: '30px', boxShadow: '0 4px 15px rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.05)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#181818', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <AlertCircle size={18} color="#ef4444" />
+                  Health Conditions
+                </h3>
+                {!isEditingConditions ? (
+                  <button onClick={() => setIsEditingConditions(true)} style={{ background: 'rgba(14, 165, 233, 0.1)', border: 'none', color: '#0ea5e9', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Edit size={14} /> Edit
+                  </button>
+                ) : (
+                  <button onClick={handleSaveConditions} style={{ background: '#10b981', border: 'none', color: '#fff', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Check size={14} /> Save
+                  </button>
+                )}
+              </div>
+              
+              {isEditingConditions ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#666', marginBottom: '4px' }}>Allergies</label>
+                    <input type="text" value={conditionsForm.allergies} onChange={(e) => setConditionsForm({...conditionsForm, allergies: e.target.value})} placeholder="e.g. Penicillin, Peanuts" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#666', marginBottom: '4px' }}>Existing Conditions</label>
+                    <input type="text" value={conditionsForm.existingConditions} onChange={(e) => setConditionsForm({...conditionsForm, existingConditions: e.target.value})} placeholder="e.g. Type 2 Diabetes, Asthma" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666', marginBottom: '4px' }}>Allergies</div>
+                    <div style={{ fontSize: '0.95rem', color: selectedPatient.allergies ? '#ef4444' : '#888', fontWeight: selectedPatient.allergies ? 600 : 400 }}>
+                      {selectedPatient.allergies || 'None reported'}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#666', marginBottom: '4px' }}>Existing Conditions</div>
+                    <div style={{ fontSize: '0.95rem', color: selectedPatient.existingConditions ? '#181818' : '#888', fontWeight: selectedPatient.existingConditions ? 600 : 400 }}>
+                      {selectedPatient.existingConditions || 'None reported'}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Visit History (Appointments) */}
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#181818', marginBottom: '15px' }}>Visit History</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '30px' }}>
+              {loadingHistory ? (
+                <div style={{ textAlign: 'center', padding: '10px', color: '#888', fontSize: '0.9rem' }}>Loading visits...</div>
+              ) : visitHistory.length === 0 ? (
+                <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '15px', textAlign: 'center', color: '#888', fontSize: '0.9rem' }}>No past visits found.</div>
+              ) : (
+                visitHistory.map((visit) => (
+                  <div key={visit.id} style={{ background: '#fff', borderRadius: '12px', padding: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(0,0,0,0.05)', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                    <div>
+                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#181818' }}>{visit.date}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={10} /> {visit.time} • Dr. {visit.staffName}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, padding: '4px 8px', borderRadius: '6px', background: visit.status === 'completed' ? 'rgba(16, 185, 129, 0.1)' : visit.status === 'pending' || visit.status === 'confirmed' ? 'rgba(14, 165, 233, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: visit.status === 'completed' ? '#10b981' : visit.status === 'pending' || visit.status === 'confirmed' ? '#0ea5e9' : '#ef4444', textTransform: 'capitalize' }}>
+                      {visit.status}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
             <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#181818', marginBottom: '15px' }}>EMR History</h3>
 
             {/* EMR Timeline */}
@@ -202,14 +328,20 @@ const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
                   return (
                     <div key={record.id} style={{ background: '#fff', borderRadius: '16px', padding: '20px', borderLeft: `4px solid ${color}`, boxShadow: '0 4px 15px rgba(0,0,0,0.03)' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#181818' }}>{record.diagnosis}</div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700, color: '#181818' }}>
+                          <span style={{ color: '#888', fontWeight: 600, marginRight: '6px' }}>Diagnosis:</span>
+                          {record.diagnosis}
+                        </div>
                         <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Calendar size={12}/> {dateStr}
                         </div>
                       </div>
-                      <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#666', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                        {record.notes}
-                      </p>
+                      <div style={{ margin: '0 0 15px 0' }}>
+                        <div style={{ fontSize: '0.8rem', color: '#888', fontWeight: 600, marginBottom: '4px' }}>Clinical Notes:</div>
+                        <p style={{ margin: '0', fontSize: '0.85rem', color: '#666', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                          {record.notes}
+                        </p>
+                      </div>
                       {record.prescription && (
                         <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '8px', fontSize: '0.8rem', color: '#181818' }}>
                           <strong>Rx:</strong> {record.prescription}

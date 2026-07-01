@@ -73,32 +73,6 @@ export const seedDatabase = async () => {
   }
   console.log("✅ tbltreatments seeded");
 
-  // ── Test user ──────────────────────────────────────────────
-
-  // tblusers
-  await setDoc(doc(db, "tblusers", TEST_USER_UID), {
-    uid: "ejCEXQ6aIRcVRcofJXqKxUZTWsZ2",
-    email: "Test_Account.3@gmail.com", // ⬅️ match what you entered in Auth
-    role_id: 2, // doctor
-    isActive: true,
-    createdAt: serverTimestamp(),
-  });
-  console.log("✅ tblusers seeded");
-
-  // tblstaff
-  await setDoc(doc(db, "tblstaff", TEST_USER_UID), {
-    staffId: "1234-5678",
-    uid: "ejCEXQ6aIRcVRcofJXqKxUZTWsZ2",
-    firstName: "Test",
-    lastName: "Doctor",
-    role: "doctor",
-    specialization: "General Practice",
-    licenseNumber: "LIC-0001",
-    contactNumber: "09000000000",
-    isActive: true,
-  });
-  console.log("✅ tblstaff seeded");
-
   // ── Patients ───────────────────────────────────────────────
 
   const patient1Uid = "patient1-uid-mock";
