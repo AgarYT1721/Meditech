@@ -51,6 +51,18 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
+  const triggerOtp = async (userEmail, userName) => {
+    try {
+      await fetch('/api/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: userEmail, name: userName || 'Staff' })
+      });
+    } catch (err) {
+      console.error('Failed to trigger OTP email', err);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
@@ -70,6 +82,7 @@ function App() {
               setOtpAttempts(0);
               setOtpRequests(1);
               setOtp('');
+              triggerOtp(data.email, data.firstName);
             }
           } else {
             if (sessionStorage.getItem('otpVerified') === 'true') {
@@ -83,6 +96,7 @@ function App() {
               setOtpAttempts(0);
               setOtpRequests(1);
               setOtp('');
+              triggerOtp(data.email, data.firstName);
             }
           }
         } catch (error) {
@@ -272,12 +286,12 @@ function App() {
     setAuthError('');
     setIsVerifying(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate verifying OTP
-      let data = { success: false, message: 'Invalid OTP code. For this demo, use 123456.' };
-      
-      if (otp === '123456') {
-        data = { success: true };
-      }
+      const response = await fetch('/api/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: staffUser?.email || email, code: otp })
+      });
+      const data = await response.json();
       
       if (data.success) {
         sessionStorage.setItem('otpVerified', 'true');
@@ -459,9 +473,6 @@ function App() {
             <form className="auth-form" onSubmit={handleOtpSubmit}>
               <div className="form-group">
                 <label>ONE_TIME_PASSCODE (OTP)</label>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                  For this demo, please use code: <strong>123456</strong>
-                </p>
                 <input 
                   type="text" 
                   className="form-input" 
@@ -485,9 +496,18 @@ function App() {
                 type="button" 
                 className="btn-secondary" 
                 disabled={otpCountdown > 0 || otpRequests >= 5}
-                onClick={() => { setOtpCountdown(90); setOtpAttempts(0); setOtp(''); setOtpRequests(prev => prev + 1); }}
+                onClick={() => { setOtpCountdown(90); setOtpAttempts(0); setOtp(''); setOtpRequests(prev => prev + 1); triggerOtp(staffUser?.email || email, staffUser?.firstName); }}
               >
                 {otpRequests >= 5 ? 'Maximum requests reached' : (otpCountdown > 0 ? `Resend available in ${otpCountdown}s` : `Resend OTP (${5 - otpRequests} left)`)}
+              </button>
+
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => handleLogout('auth')}
+                style={{ marginTop: '15px', color: '#ef4444', borderStyle: 'dashed' }}
+              >
+                CANCEL / RETURN TO LOGIN
               </button>
             </form>
           )}

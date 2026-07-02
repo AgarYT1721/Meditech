@@ -256,10 +256,23 @@ const ClientOtpVerification = ({ email, onOtpSuccess, onBackToRegister }) => {
           ) : countdown > 0 ? (
             <span>Resend code in <span style={{ fontWeight: 'bold' }}>{countdown}s</span></span>
           ) : (
-            <span onClick={() => { setCountdown(90); setAttempts(0); setOtp(''); setStatus('idle'); setRequests(prev => prev + 1); }} style={{ color: '#0066ff', fontWeight: 600, cursor: 'pointer' }}>
+            <span onClick={() => { 
+              setCountdown(90); setAttempts(0); setOtp(''); setStatus('idle'); setRequests(prev => prev + 1); 
+              fetch('/api/send-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) }).catch(console.error);
+            }} style={{ color: '#0066ff', fontWeight: 600, cursor: 'pointer' }}>
               Resend Verification Code ({5 - requests} left)
             </span>
           )}
+        </motion.div>
+
+        <motion.div variants={itemVariants} style={{ marginTop: '20px', textAlign: 'center' }}>
+          <button
+            type="button"
+            onClick={onBackToRegister}
+            style={{ background: 'transparent', border: 'none', color: '#ef4444', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem', textDecoration: 'underline' }}
+          >
+            Cancel & Return
+          </button>
         </motion.div>
         </motion.div>
       </motion.div>
