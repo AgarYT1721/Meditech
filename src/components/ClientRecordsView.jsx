@@ -8,19 +8,6 @@ const ClientRecordsView = ({ clientUid }) => {
   const [loading, setLoading] = useState(true);
   const [selectedRecord, setSelectedRecord] = useState(null);
 
-  const handleDownload = (record) => {
-    const content = `MediTech Medical Record\n\nDate: ${record.date}\nDoctor: ${record.doctorName}\n\nDiagnosis: ${record.diagnosis || record.title}\n\nNotes:\n${record.notes || 'No notes available'}\n\nPrescription:\n${record.prescription || 'None'}\n`;
-    const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Medical_Record_${record.date.replace(/\//g, '-')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
   useEffect(() => {
     const fetchRecords = async () => {
       try {
@@ -102,9 +89,6 @@ const ClientRecordsView = ({ clientUid }) => {
                 <button onClick={() => setSelectedRecord(record)} style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '8px', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px', color: '#181818', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
                   <Eye size={14} /> View
                 </button>
-                <button onClick={() => handleDownload(record)} style={{ background: '#f8fafc', border: '1px solid rgba(0,0,0,0.05)', borderRadius: '8px', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '5px', color: '#181818', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}>
-                  <Download size={14} /> Download
-                </button>
               </div>
             </div>
           </motion.div>
@@ -172,12 +156,6 @@ const ClientRecordsView = ({ clientUid }) => {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div style={{ marginTop: '30px', display: 'flex', gap: '15px' }}>
-                <button onClick={() => handleDownload(selectedRecord)} style={{ flex: 1, padding: '14px', background: '#0066ff', color: 'white', border: 'none', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(0, 102, 255, 0.2)' }}>
-                  <Download size={18} /> Download Record
-                </button>
               </div>
             </motion.div>
           </motion.div>

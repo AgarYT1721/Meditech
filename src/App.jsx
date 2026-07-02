@@ -51,7 +51,16 @@ function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
+let lastOtpTriggerTime = 0;
+
   const triggerOtp = async (userEmail, userName) => {
+    const now = Date.now();
+    if (now - lastOtpTriggerTime < 5000) {
+      console.log('Skipping duplicate OTP trigger (debounced)');
+      return;
+    }
+    lastOtpTriggerTime = now;
+    
     try {
       await fetch('/api/send-otp', {
         method: 'POST',

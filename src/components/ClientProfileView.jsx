@@ -161,10 +161,6 @@ const ClientProfileView = ({ patientData, onLogout, onProfileUpdate }) => {
             <ChevronRight size={18} color="#ccc" />
           </button>
           <button 
-            onClick={(e) => {
-              setShowLogoutModal(true);
-            }}
-            style={{ width: '100%', padding: '15px', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: '15px', color: '#ef4444', fontWeight: 600 }}
             onClick={() => setShowLogoutModal(true)}
             style={{ width: '100%', padding: '15px', background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', gap: '15px', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}
           >

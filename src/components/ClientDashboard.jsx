@@ -332,7 +332,7 @@ const ClientDashboard = ({ clientUid, onLogout }) => {
 
         {activeTab === 'appointments' && (
           <motion.div key="appointments" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} style={{ width: '100%', boxSizing: 'border-box' }}>
-            <ClientAppointmentsView clientUid={clientUid} patientData={patient} />
+            <ClientAppointmentsView clientUid={clientUid} patientData={patient} onNavigate={setActiveTab} />
           </motion.div>
         )}
 

@@ -5,7 +5,7 @@ import { getPatients, getMedicalRecords, addMedicalRecord, updatePatientConditio
 import { getPatientAppointments } from '../services/appointmentService';
 import { getDoctors } from '../services/staffService';
 
-const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
+const StaffPatientsView = ({ staffUser, targetPatientUid, startConsultation }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [showAddEntry, setShowAddEntry] = useState(false);
@@ -90,7 +90,11 @@ const StaffPatientsView = ({ targetPatientUid, startConsultation }) => {
   const handleAddEMR = async (e) => {
     e.preventDefault();
     try {
-      await addMedicalRecord(selectedPatient.uid, emrForm);
+      const docName = staffUser ? `Dr. ${staffUser.firstName} ${staffUser.lastName}`.replace('Dr. Dr.', 'Dr.') : 'MediTech Provider';
+      await addMedicalRecord(selectedPatient.uid, {
+        ...emrForm,
+        doctorName: docName
+      });
       setShowAddEntry(false);
       setEmrForm({ diagnosis: '', notes: '', prescription: '' });
       fetchEMRs();

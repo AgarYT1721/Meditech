@@ -756,8 +756,8 @@ const StaffDashboard = ({ staffUser, setStaffUser, onLogout }) => {
             )}
 
             {activeTab === 'patients' && (
-              <motion.div key="patients" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} style={{ width: '100%' }}>
-                <StaffPatientsView targetPatientUid={targetPatientUid} startConsultation={startConsultation} />
+              <motion.div key="patients" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.3 }} style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <StaffPatientsView staffUser={staffUser} targetPatientUid={targetPatientUid} startConsultation={startConsultation} />
               </motion.div>
             )}
 

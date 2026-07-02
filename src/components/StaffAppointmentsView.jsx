@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Clock, MapPin, Search, Filter, Check, X, CalendarDays, Loader2, Plus } from 'lucide-react';
 import { getStaffAppointments, subscribeToStaffAppointments, updateAppointmentStatus, createAppointment, cancelAppointment, updateAppointmentDate } from '../services/appointmentService';
-import { getPatients } from '../services/patientService';
+import { getPatients, addMedicalRecord } from '../services/patientService';
 
 const StaffAppointmentsView = ({ staffUser }) => {
   const [activeTab, setActiveTab] = useState('pending');
@@ -22,6 +22,12 @@ const StaffAppointmentsView = ({ staffUser }) => {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [rescheduleForm, setRescheduleForm] = useState({ id: '', date: '', time: '', reason: '' });
   const [selectedRescheduleApt, setSelectedRescheduleApt] = useState(null);
+  
+  // Complete Appointment Modal State
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [completeApt, setCompleteApt] = useState(null);
+  const [emrForm, setEmrForm] = useState({ diagnosis: '', notes: '', prescription: '' });
+  const [completing, setCompleting] = useState(false);
   
   const now = new Date();
   const minDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -76,12 +82,46 @@ const StaffAppointmentsView = ({ staffUser }) => {
         setCancelForm({ id: appointmentId, reason: '' });
         setShowCancelModal(true);
         return; // Wait for modal submission
+      } else if (newStatus === 'completed') {
+        const apt = appointments.find(a => a.id === appointmentId);
+        if (apt) {
+          setCompleteApt(apt);
+          setShowCompleteModal(true);
+        }
+        return;
       } else {
         await updateAppointmentStatus(appointmentId, newStatus);
       }
       fetchData(); // Refresh the list
     } catch (error) {
       console.error(`Failed to update status to ${newStatus}`, error);
+    }
+  };
+
+  const handleCompleteSubmit = async (e) => {
+    e.preventDefault();
+    if (!emrForm.diagnosis || !emrForm.notes) return alert("Diagnosis and notes are required.");
+    setCompleting(true);
+    try {
+      const docName = staffUser ? `Dr. ${staffUser.firstName} ${staffUser.lastName}`.replace('Dr. Dr.', 'Dr.') : 'MediTech Provider';
+      // 1. Add the medical record, linked to the appointment
+      await addMedicalRecord(completeApt.patientUid, {
+        ...emrForm,
+        doctorName: docName,
+        appointmentId: completeApt.id
+      });
+      // 2. Update appointment status
+      await updateAppointmentStatus(completeApt.id, 'completed');
+      
+      setShowCompleteModal(false);
+      setEmrForm({ diagnosis: '', notes: '', prescription: '' });
+      setCompleteApt(null);
+      fetchData();
+    } catch (error) {
+      console.error("Failed to complete appointment", error);
+      alert("Failed to complete appointment and save record.");
+    } finally {
+      setCompleting(false);
     }
   };
 
@@ -574,6 +614,58 @@ const StaffAppointmentsView = ({ staffUser }) => {
               <button onClick={() => setShowSummaryModal(false)} style={{ width: '100%', marginTop: '20px', background: '#0ea5e9', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontSize: '0.95rem', fontWeight: 'bold', cursor: 'pointer' }}>
                 Close Summary
               </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Complete Appointment EMR Modal */}
+      <AnimatePresence>
+        {showCompleteModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowCompleteModal(false)}
+          >
+            <motion.div 
+              initial={{ y: 20, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#fff', width: '90%', maxWidth: '600px', borderRadius: '24px', padding: '30px', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box', boxShadow: '0 25px 50px rgba(0,0,0,0.1)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>Complete Appointment</h3>
+                <button onClick={() => setShowCompleteModal(false)} style={{ background: '#f0f2f5', border: 'none', width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ marginBottom: '20px', padding: '15px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981', borderRadius: '12px', fontSize: '0.9rem', fontWeight: 600 }}>
+                Please write the Consultation Note and Prescription to officially complete this appointment.
+              </div>
+
+              <form onSubmit={handleCompleteSubmit}>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#181818', marginBottom: '8px' }}>Diagnosis / Title</label>
+                  <input type="text" required value={emrForm.diagnosis} onChange={(e) => setEmrForm({...emrForm, diagnosis: e.target.value})} placeholder="e.g. Acute Bronchitis" style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box' }} />
+                </div>
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#181818', marginBottom: '8px' }}>Consultation Notes</label>
+                  <textarea required rows={4} value={emrForm.notes} onChange={(e) => setEmrForm({...emrForm, notes: e.target.value})} placeholder="Patient presented with..." style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical' }} />
+                </div>
+                <div style={{ marginBottom: '25px' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, color: '#181818', marginBottom: '8px' }}>Prescription (Optional)</label>
+                  <textarea rows={3} value={emrForm.prescription} onChange={(e) => setEmrForm({...emrForm, prescription: e.target.value})} placeholder="Medications..." style={{ width: '100%', padding: '15px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: '0.9rem', boxSizing: 'border-box', resize: 'vertical' }} />
+                </div>
+                
+                <button type="submit" disabled={completing} style={{ width: '100%', background: '#10b981', color: 'white', border: 'none', padding: '18px', borderRadius: '16px', fontSize: '1rem', fontWeight: 'bold', boxShadow: '0 10px 25px rgba(16, 185, 129, 0.3)', cursor: completing ? 'not-allowed' : 'pointer', opacity: completing ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+                  {completing ? <Loader2 size={20} className="spinner" style={{ animation: 'spin 1s linear infinite' }} /> : <Check size={20} />}
+                  {completing ? 'Completing...' : 'Save Record & Complete'}
+                </button>
+              </form>
             </motion.div>
           </motion.div>
         )}

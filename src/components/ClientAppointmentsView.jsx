@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, Clock, MapPin, ChevronRight, X, Plus, ChevronLeft, Heart, Globe, Briefcase, ChevronsRight, Trash2, Loader2 } from 'lucide-react';
-import { getPatientAppointments, createAppointment, cancelAppointment, updateAppointmentDate } from '../services/appointmentService';
+import { getPatientAppointments, createAppointment, cancelAppointment, updateAppointmentDate, getStaffAppointments } from '../services/appointmentService';
 import { getDoctors } from '../services/staffService';
+import { getRecordByAppointmentId } from '../services/recordService';
 
 const formatTime = (timeStr) => {
   if (!timeStr) return "";
@@ -14,10 +15,15 @@ const formatTime = (timeStr) => {
   return `${hour}:${m} ${ampm}`;
 };
 
-const ClientAppointmentsView = ({ clientUid, patientData }) => {
+const ClientAppointmentsView = ({ clientUid, patientData, onNavigate }) => {
   const [activeTab, setActiveTab] = useState('upcoming');
   const [showBooking, setShowBooking] = useState(false);
   const [showDoctorList, setShowDoctorList] = useState(false);
+  
+  // Visit Summary Modal State
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [summaryRecord, setSummaryRecord] = useState(null);
+  const [loadingSummary, setLoadingSummary] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
   const [selectedDate, setSelectedDate] = useState(() => {
     const d = new Date();
@@ -26,6 +32,14 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
   const [selectedTime, setSelectedTime] = useState('04:45 PM');
   const [reasonDescription, setReasonDescription] = useState('General Checkup');
   const [rescheduleAptId, setRescheduleAptId] = useState(null);
+  const [bookedTimes, setBookedTimes] = useState([]);
+  const [isBooking, setIsBooking] = useState(false);
+
+  // Helper to get today's date string
+  const getTodayDateStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
 
   const dates = React.useMemo(() => {
     const result = [];
@@ -90,9 +104,36 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
     }
   };
 
+  useEffect(() => {
+    const fetchBookedTimes = async () => {
+      if (!selectedDoctor || !selectedDate) {
+        setBookedTimes([]);
+        return;
+      }
+      try {
+        const staffUid = selectedDoctor.uid || selectedDoctor.id;
+        const staffApts = await getStaffAppointments(staffUid);
+        // Filter appointments on the selected date that are not cancelled or declined
+        const booked = staffApts
+          .filter(apt => apt.date === selectedDate && apt.status !== 'cancelled' && apt.status !== 'declined')
+          .map(apt => apt.time);
+        setBookedTimes(booked);
+        
+        // If currently selected time is now booked, unselect it
+        if (booked.includes(selectedTime)) {
+          setSelectedTime('');
+        }
+      } catch (error) {
+        console.error("Failed to fetch booked times", error);
+      }
+    };
+    fetchBookedTimes();
+  }, [selectedDoctor, selectedDate]);
+
   const handleBook = async () => {
     if (!selectedDoctor) return;
     try {
+      setIsBooking(true);
       const dateStr = selectedDate;
       if (rescheduleAptId) {
         await updateAppointmentDate(rescheduleAptId, dateStr, selectedTime, reasonDescription);
@@ -111,10 +152,16 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
       }
       setShowBooking(false);
       setRescheduleAptId(null);
+      if(showDoctorList === false) {
+        setSelectedDoctor(null);
+      }
       fetchData(); // refresh list
       setActiveTab('upcoming');
     } catch (error) {
       console.error(error);
+      alert("Failed to save appointment. Please try again.");
+    } finally {
+      setIsBooking(false);
     }
   };
 
@@ -230,12 +277,39 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               )}
               {activeTab === 'completed' && (
                 <>
-                  <button style={{ flex: 1, background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Re-book</button>
-                  <button style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer' }}>Visit summary</button>
+                  <button onClick={() => {
+                    const doctor = doctorsList.find(d => d.uid === apt.staffUid || d.id === apt.staffUid);
+                    if (doctor) {
+                      setSelectedDoctor(doctor);
+                      setShowBooking(true);
+                      setRescheduleAptId(null);
+                    }
+                  }} style={{ flex: 1, background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Re-book</button>
+                  <button onClick={async () => {
+                    setLoadingSummary(true);
+                    try {
+                      const record = await getRecordByAppointmentId(clientUid, apt.id);
+                      if (record) {
+                        setSummaryRecord({ ...record, appointmentDetails: apt });
+                        setShowSummaryModal(true);
+                      } else {
+                        // Fallback if no specific record is found for this appointment
+                        if (onNavigate) onNavigate('records');
+                        else alert("Your visit summary is securely filed in your Medical Records.");
+                      }
+                    } catch (e) {
+                      if (onNavigate) onNavigate('records');
+                    } finally {
+                      setLoadingSummary(false);
+                    }
+                  }} style={{ flex: 1, background: '#0066ff', border: 'none', color: '#fff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', boxShadow: '0 4px 15px rgba(0,102,255,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    {loadingSummary ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : null}
+                    Visit summary
+                  </button>
                 </>
               )}
               {activeTab === 'cancelled' && (
-                <button style={{ width: '100%', background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Cancellation details</button>
+                <button onClick={() => alert(`Appointment cancelled.\n\nReason: ${apt.reasonDescription || 'Patient requested cancellation'}\nPlease contact support if you need further assistance.`)} style={{ width: '100%', background: 'rgba(0,102,255,0.05)', border: 'none', color: '#0066ff', padding: '14px', borderRadius: '40px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer' }}>Cancellation details</button>
               )}
             </div>
             
@@ -401,26 +475,60 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
               <h4 style={{ margin: 0, marginBottom: '20px', fontSize: '1rem', fontWeight: 800, color: '#181818' }}>Choose time</h4>
               
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                {times.map((time, idx) => (
-                  <div 
-                    key={idx}
-                    onClick={() => setSelectedTime(time)}
-                    style={{ 
-                      padding: '12px 5px', 
-                      textAlign: 'center', 
-                      borderRadius: '16px', 
-                      background: selectedTime === time ? '#0066ff' : '#f4f7fa', 
-                      color: selectedTime === time ? '#fff' : '#666', 
-                      fontSize: '0.75rem', 
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease',
-                      boxShadow: selectedTime === time ? '0 8px 15px rgba(0,102,255,0.2)' : 'none'
-                    }}
-                  >
-                    {time}
-                  </div>
-                ))}
+                {times.map((time, idx) => {
+                  const isBookedByDoctor = bookedTimes.includes(time);
+                  const isBookedByPatient = appointments
+                    .filter(apt => apt.date === selectedDate && apt.status !== 'cancelled' && apt.status !== 'declined')
+                    .map(apt => apt.time)
+                    .includes(time);
+                  
+                  // Past time check
+                  let isPastTime = false;
+                  if (selectedDate === getTodayDateStr()) {
+                    const [timeStr, modifier] = time.split(' ');
+                    let [hours, minutes] = timeStr.split(':');
+                    hours = parseInt(hours, 10);
+                    if (modifier === 'PM' && hours < 12) hours += 12;
+                    if (modifier === 'AM' && hours === 12) hours = 0;
+                    
+                    const slotTime = new Date();
+                    slotTime.setHours(hours, parseInt(minutes, 10), 0, 0);
+                    if (slotTime < new Date()) {
+                      isPastTime = true;
+                    }
+                  }
+
+                  const isBooked = isBookedByDoctor || isBookedByPatient || isPastTime;
+                  
+                  let tooltip = "";
+                  if (isPastTime) tooltip = "This time has already passed";
+                  else if (isBookedByPatient) tooltip = "You already have an appointment at this time";
+                  else if (isBookedByDoctor) tooltip = "Doctor is unavailable";
+
+                  return (
+                    <div 
+                      key={idx}
+                      onClick={() => !isBooked && setSelectedTime(time)}
+                      style={{ 
+                        padding: '12px 5px', 
+                        textAlign: 'center', 
+                        borderRadius: '16px', 
+                        background: isBooked ? '#e2e8f0' : (selectedTime === time ? '#0066ff' : '#f4f7fa'), 
+                        color: isBooked ? '#94a3b8' : (selectedTime === time ? '#fff' : '#666'), 
+                        fontSize: '0.75rem', 
+                        fontWeight: 700,
+                        cursor: isBooked ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: selectedTime === time && !isBooked ? '0 8px 15px rgba(0,102,255,0.2)' : 'none',
+                        textDecoration: isBooked ? 'line-through' : 'none',
+                        opacity: isBooked ? 0.6 : 1
+                      }}
+                      title={tooltip}
+                    >
+                      {time}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -439,29 +547,93 @@ const ClientAppointmentsView = ({ clientUid, patientData }) => {
             {/* Book Button */}
             <button 
               onClick={handleBook}
+              disabled={isBooking}
               style={{ 
                 width: '100%', 
                 padding: '20px', 
-                background: '#0066ff', 
+                background: isBooking ? '#94a3b8' : '#0066ff', 
                 color: 'white', 
                 border: 'none', 
                 borderRadius: '100px', 
                 fontSize: '1rem', 
                 fontWeight: 'bold', 
-                boxShadow: '0 10px 25px rgba(0, 102, 255, 0.3)',
+                boxShadow: isBooking ? 'none' : '0 10px 25px rgba(0,102,255,0.3)',
+                cursor: isBooking ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '15px',
-                cursor: 'pointer',
                 marginBottom: '20px'
               }}
             >
-              <div style={{ background: '#fff', color: '#0066ff', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <ChevronsRight size={16} />
-              </div>
-              {rescheduleAptId ? "Confirm Reschedule" : "Book Consultation"}
+              {isBooking ? <Loader2 size={20} style={{ animation: 'spin 1s linear infinite' }} /> : (
+                <div style={{ background: '#fff', color: '#0066ff', borderRadius: '50%', width: '30px', height: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <ChevronsRight size={16} />
+                </div>
+              )}
+              {isBooking ? (rescheduleAptId ? "Rescheduling..." : "Booking...") : (rescheduleAptId ? "Confirm Reschedule" : "Book Consultation")}
             </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Visit Summary Modal */}
+      <AnimatePresence>
+        {showSummaryModal && summaryRecord && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowSummaryModal(false)}
+          >
+            <motion.div 
+              initial={{ y: 20, opacity: 0, scale: 0.95 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 20, opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ background: '#fff', width: '90%', maxWidth: '500px', borderRadius: '24px', padding: '30px', maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box', boxShadow: '0 25px 50px rgba(0,0,0,0.1)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800 }}>Visit Summary</h3>
+                <button onClick={() => setShowSummaryModal(false)} style={{ background: '#f0f2f5', border: 'none', width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '15px', paddingBottom: '15px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                  <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#e2e8f0', padding: '2px', flexShrink: 0 }}>
+                    <img src={summaryRecord.appointmentDetails?.staffProfilePicture || `https://api.dicebear.com/7.x/avataaars/svg?seed=${summaryRecord.appointmentDetails?.staffUid}&backgroundColor=cbd5e1`} alt="Doctor" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  </div>
+                  <div>
+                    <h4 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#181818' }}>Dr. {summaryRecord.appointmentDetails?.staffName}</h4>
+                    <div style={{ color: '#0066ff', fontSize: '0.85rem', fontWeight: 600, marginTop: '4px' }}>Date: {summaryRecord.appointmentDetails?.date}</div>
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Diagnosis / Reason</div>
+                    <div style={{ fontSize: '0.95rem', color: '#181818', fontWeight: 500 }}>{summaryRecord.diagnosis || summaryRecord.title}</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                    <div style={{ fontSize: '0.75rem', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Consultation Notes</div>
+                    <div style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{summaryRecord.notes || "No additional notes provided."}</div>
+                  </div>
+                  {summaryRecord.prescription && (
+                    <div style={{ background: '#fff', padding: '15px', borderRadius: '12px', border: '1px solid rgba(0,0,0,0.05)' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>Prescription</div>
+                      <div style={{ fontSize: '0.9rem', color: '#333', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{summaryRecord.prescription}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <button onClick={() => setShowSummaryModal(false)} style={{ width: '100%', background: '#0066ff', color: 'white', border: 'none', padding: '16px', borderRadius: '16px', fontSize: '1rem', fontWeight: 'bold', boxShadow: '0 10px 25px rgba(0, 102, 255, 0.3)', cursor: 'pointer' }}>
+                Done
+              </button>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
