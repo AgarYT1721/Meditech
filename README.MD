@@ -144,6 +144,6 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 ## 📫 Contact
 
-**Your Name** - [your.email@example.com](mailto:your.email@example.com)
+**Your Name** - [REDACTED](mailto:your.email@example.com)
 
-Project Link: [https://github.com/your-username/MediTech](https://github.com/your-username/MediTech)
+Project Link: [https://github.com/your-username/MediTech](https://github.com/AgarYT1721/MediTech)
